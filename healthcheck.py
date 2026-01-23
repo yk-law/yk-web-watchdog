@@ -371,10 +371,21 @@ def ssl_info(host: str) -> SslInfo:
                     covers = True
                     break
                 if san.startswith("*."):
-                    suffix = san[1:]  # ".example.com"
-                    if host.endswith(suffix) and host.count(".") == (suffix.count(".") + 1):
-                        covers = True
-                        break
+                    suffix = san[1:]  # ".yklawfirm.co.kr"
+                    # Wildcard covers one level: *.yklawfirm.co.kr covers www.yklawfirm.co.kr but not yklawfirm.co.kr
+                    # Check: host must end with suffix AND have exactly the same number of dots as suffix
+                    # (because suffix already includes the dot after the wildcard)
+                    if host.endswith(suffix):
+                        host_dots = host.count(".")
+                        suffix_dots = suffix.count(".")
+                        # Example: www.yklawfirm.co.kr (3 dots) matches *.yklawfirm.co.kr -> .yklawfirm.co.kr (3 dots)
+                        # The part before suffix should be exactly one label (no dots)
+                        if host_dots == suffix_dots:
+                            # Verify the prefix is exactly one label (no dots)
+                            prefix = host[:-len(suffix)]  # "www" from "www.yklawfirm.co.kr"
+                            if prefix and "." not in prefix:
+                                covers = True
+                                break
 
         # Limit SAN items for Slack
         if len(san_list) > CERT_MAX_SAN_ITEMS:
@@ -607,10 +618,12 @@ def build_slack_text(results: List[CurlMetrics], run_id: str, host: str) -> Tupl
     """
     Returns (text, should_ping_channel_due_to_cert)
     """
-    # More explicit header format
+    # Beautiful header format with emoji
     header = (
-        f"run_id={run_id} | host={host} | {now_local_str()} | "
-        f"timeout={HC_TIMEOUT_SEC}s | slow>={HC_SLOW_MS}ms | mode={REPORT_MODE}"
+        f"🔍 *Health Check Report*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 `{run_id}` | 🖥️ `{host}` | 🕐 `{now_local_str()}`\n"
+        f"⏱️ Timeout: `{HC_TIMEOUT_SEC}s` | 🐌 Slow: `>={HC_SLOW_MS}ms` | 📊 Mode: `{REPORT_MODE}`"
     )
 
     lines: List[str] = [header, ""]
@@ -659,73 +672,99 @@ def build_slack_text(results: List[CurlMetrics], run_id: str, host: str) -> Tupl
                     cert_emoji = " ⚠️"
                     cert_warn_hit = True
 
-        # Build a more explicit single-line format for each domain
-        domain_parts = [f"{status_emoji}{slow_emoji}{cert_emoji} {domain}"]
-        domain_parts.append(f"({status_txt})")
-        domain_parts.append(f"total={r.total_ms}ms")
-        domain_parts.append(f"ip={r.remote_ip or '-'}")
+        # Build beautiful formatted output for each domain
+        # Domain header with status
+        status_icon = "✅" if r.ok else "❌"
+        domain_header = f"{status_icon} *{domain}*"
+        if is_slow:
+            domain_header += " 🐢 *SLOW*"
+        if cert_emoji:
+            domain_header += cert_emoji
+        
+        lines.append(domain_header)
+        lines.append(f"   📊 Status: `{status_txt}` | ⏱️ Total: `{r.total_ms}ms` | 🌐 IP: `{r.remote_ip or '-'}`")
         
         # Redirects
         redirect_str = chain_to_str(r.redirect_chain)
         if redirect_str != "-":
-            domain_parts.append(f"redirects: {redirect_str}")
+            lines.append(f"   🔀 Redirects: `{redirect_str}`")
         
         # DNS
         dns = dns_lookup(domain)
         dns_a = ','.join(dns['A']) if dns['A'] else '-'
         dns_aaaa = ','.join(dns['AAAA']) if dns['AAAA'] else '-'
-        domain_parts.append(f"dns: A={dns_a}  AAAA={dns_aaaa}")
+        lines.append(f"   🌍 DNS: A=`{dns_a}` AAAA=`{dns_aaaa}`")
         
-        # Timing
+        # Timing breakdown
         timing_parts = []
         if r.dns_ms is not None:
-            timing_parts.append(f"dns={r.dns_ms}ms")
+            timing_parts.append(f"DNS={r.dns_ms}ms")
         if r.connect_ms is not None:
-            timing_parts.append(f"conn={r.connect_ms}ms")
+            timing_parts.append(f"Conn={r.connect_ms}ms")
         if r.tls_ms is not None:
-            timing_parts.append(f"tls={r.tls_ms}ms")
+            timing_parts.append(f"TLS={r.tls_ms}ms")
         if r.ttfb_ms is not None:
-            timing_parts.append(f"ttfb={r.ttfb_ms}ms")
+            timing_parts.append(f"TTFB={r.ttfb_ms}ms")
         if r.total_ms is not None:
-            timing_parts.append(f"total={r.total_ms}ms")
+            timing_parts.append(f"Total={r.total_ms}ms")
         if timing_parts:
-            domain_parts.append(f"timing: {'  '.join(timing_parts)}")
+            lines.append(f"   ⚡ Timing: `{' | '.join(timing_parts)}`")
         
-        # SSL
+        # SSL Certificate info
         if parsed.scheme == "https" and r.ssl:
-            ssl_parts = []
+            ssl_info_parts = []
             if r.ssl.notafter:
-                ssl_parts.append(f"notAfter={r.ssl.notafter}")
+                ssl_info_parts.append(f"Expires: `{r.ssl.notafter}`")
             if r.ssl.expires_in_days is not None:
-                ssl_parts.append(f"cert_expires_in={r.ssl.expires_in_days}d")
-            if r.ssl.subject:
-                ssl_parts.append(f"subject={r.ssl.subject}")
-            if ssl_parts:
-                domain_parts.append(f"ssl: {'  '.join(ssl_parts)}")
+                days_left = r.ssl.expires_in_days
+                if days_left < 0:
+                    ssl_info_parts.append(f"⚠️ *EXPIRED* ({abs(days_left)}d ago)")
+                elif days_left <= CERT_ALERT_DAYS:
+                    ssl_info_parts.append(f"🚨 *{days_left}d left*")
+                elif days_left <= CERT_WARN_DAYS:
+                    ssl_info_parts.append(f"⚠️ *{days_left}d left*")
+                else:
+                    ssl_info_parts.append(f"✅ {days_left}d left")
             
-            if issuer_line:
-                domain_parts.append(issuer_line)
+            if ssl_info_parts:
+                lines.append(f"   🔒 SSL: {' | '.join(ssl_info_parts)}")
+            
+            if r.ssl.subject:
+                lines.append(f"   📜 Subject: `{r.ssl.subject}`")
+            
+            if r.ssl.issuer:
+                lines.append(f"   🏢 Issuer: `{r.ssl.issuer}`")
             
             if r.ssl.san:
-                cover_text = " (covers host )" if r.ssl.san_covers_host is True else ""
-                domain_parts.append(f"san{cover_text}: {', '.join(r.ssl.san)}")
+                # Show covers host status only when it's explicitly True or False
+                if r.ssl.san_covers_host is True:
+                    cover_text = " (✅ covers host)"
+                elif r.ssl.san_covers_host is False:
+                    cover_text = " (❌ does not cover host)"
+                else:
+                    cover_text = ""  # Unknown status, don't show anything
+                lines.append(f"   📋 SAN{cover_text}: `{', '.join(r.ssl.san)}`")
         
         # Headers
         headers_str = headers_pretty(r.headers or {})
         if headers_str and headers_str != "-":
-            domain_parts.append(f"headers: {headers_str}")
+            # Truncate long headers for readability
+            if len(headers_str) > 200:
+                headers_str = headers_str[:200] + "..."
+            lines.append(f"   📨 Headers: `{headers_str}`")
         
         # Error
         if r.err:
-            domain_parts.append(f"error: `{r.err}`")
+            lines.append(f"   ⚠️ Error: `{r.err[:200]}{'...' if len(r.err) > 200 else ''}`")
         
-        # Join all parts for this domain
-        lines.append("  ".join(domain_parts))
-        lines.append("")
+        lines.append("")  # Empty line between domains
 
+    # Add footer
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    
     text = "\n".join(lines).strip()
     if len(text) > SLACK_MAX_CHARS:
-        text = text[: SLACK_MAX_CHARS - 250] + "\n\n...(truncated)\n" + f"See local log: `{log_file_path()}`"
+        text = text[: SLACK_MAX_CHARS - 250] + "\n\n⚠️ *메시지가 잘렸습니다*\n" + f"전체 로그: `{log_file_path()}`"
 
     return text, cert_warn_hit
 
@@ -768,22 +807,24 @@ def main() -> None:
 
     text, cert_warn_hit = build_slack_text(results, run_id=run_id, host=host)
 
-    # Mention logic:
+    # Mention logic with beautiful formatting:
     # - Always mention the owners (ALWAYS_MENTION - comma-separated list)
     # - If any site is DOWN OR cert warning threshold is hit, add <!channel> (when enabled)
     # - Add "YK Watchdog" prefix before mentions
     prefix_lines = []
     
-    # Add "YK Watchdog" prefix
-    prefix_lines.append("YK Watchdog")
+    # Add beautiful "YK Watchdog" header
+    prefix_lines.append("🐕 *YK Watchdog*")
+    prefix_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
     # Add individual mentions
     if ALWAYS_MENTION:
-        prefix_lines.extend(ALWAYS_MENTION)
+        mentions = " ".join(ALWAYS_MENTION)
+        prefix_lines.append(f"👥 알림 대상: {mentions}")
 
     if CHANNEL_MENTION_ON_FAIL == "1":
         if any(not r.ok for r in results) or cert_warn_hit:
-            prefix_lines.insert(1, "<!channel>")  # Insert after "YK Watchdog"
+            prefix_lines.append("📢 <!channel>")
 
     prefix = "\n".join(prefix_lines) + "\n\n"
 
