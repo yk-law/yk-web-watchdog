@@ -40,10 +40,11 @@ SLACK_POST_MODE = env_str("SLACK_POST_MODE", "json").lower()
 if SLACK_POST_MODE not in ("json", "payload"):
     raise RuntimeError("SLACK_POST_MODE must be 'json' or 'payload'")
 
-ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "@박평우")  # Comma-separated list of mentions
-CHANNEL_MENTION_ON_FAIL = env_str("CHANNEL_MENTION_ON_FAIL", "1")
+ENABLE_MENTIONS = env_str("ENABLE_MENTIONS", "1")  # Enable mentions (1=enabled, 0=disabled)
+ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "@박평우")  # Comma-separated list of mentions (only used if ENABLE_MENTIONS=1)
+CHANNEL_MENTION_ON_FAIL = env_str("CHANNEL_MENTION_ON_FAIL", "1")  # Mention channel on failure (only used if ENABLE_MENTIONS=1)
 SLACK_IMAGE_URL = env_str("SLACK_IMAGE_URL", "")  # Optional image URL for each notification
-SLACK_EMOJI_ROTATION = env_str("SLACK_EMOJI_ROTATION", "1")  # Enable emoji rotation (1) or disable (0)
+SLACK_EMOJI_ROTATION = env_str("SLACK_EMOJI_ROTATION", "1")  # Enable emoji rotation (1=enabled, 0=disabled)
 
 TARGETS_RAW = env_str("TARGETS")
 if not TARGETS_RAW:
@@ -808,6 +809,7 @@ def main() -> None:
     text, cert_warn_hit = build_slack_text(results, run_id=run_id, host=host)
 
     # Mention logic with beautiful formatting:
+    # - Only add mentions if ENABLE_MENTIONS is enabled
     # - Always mention the owners (ALWAYS_MENTION - comma-separated list)
     # - If any site is DOWN OR cert warning threshold is hit, add <!channel> (when enabled)
     # - Add "YK Watchdog" prefix before mentions
@@ -817,14 +819,19 @@ def main() -> None:
     prefix_lines.append("🐕 *YK Watchdog*")
     prefix_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
-    # Add individual mentions
-    if ALWAYS_MENTION:
-        mentions = " ".join(ALWAYS_MENTION)
-        prefix_lines.append(f"👥 알림 대상: {mentions}")
+    # Add mentions only if enabled
+    if ENABLE_MENTIONS == "1":
+        # Add individual mentions
+        if ALWAYS_MENTION:
+            mentions = " ".join(ALWAYS_MENTION)
+            prefix_lines.append(f"mentions: {mentions}")
 
-    if CHANNEL_MENTION_ON_FAIL == "1":
-        if any(not r.ok for r in results) or cert_warn_hit:
-            prefix_lines.append("📢 <!channel>")
+        if CHANNEL_MENTION_ON_FAIL == "1":
+            if any(not r.ok for r in results) or cert_warn_hit:
+                prefix_lines.append("📢 <!channel>")
+    # else:
+    #     # Mentions disabled
+    #     prefix_lines.append("mentions disabled")
 
     prefix = "\n".join(prefix_lines) + "\n\n"
 
