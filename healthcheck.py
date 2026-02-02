@@ -1018,8 +1018,11 @@ def main() -> None:
     state = load_state()
     global_state = state.get("_global", {})
     last_check_time = global_state.get("last_check", None)
+    last_run_id = global_state.get("last_run_id", None)
     is_restart = False
     
+    # Check if this is a restart by comparing run_id sequence
+    # If run_id is not sequential (time gap or different pattern), it's likely a restart
     if last_check_time:
         try:
             # Parse last check time and current time
@@ -1027,9 +1030,30 @@ def main() -> None:
             current_dt = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
             time_diff = (current_dt - last_dt).total_seconds()
             
-            # If gap is more than 10 minutes (normal interval is 3 minutes), consider it a restart
-            if time_diff > 600:  # 10 minutes
+            # Check if force_restart_report flag is set in state (from restart.sh)
+            force_restart = global_state.get("force_restart_report", False)
+            
+            # If gap is more than 5 minutes (normal interval is 3 minutes), consider it a restart
+            # Also check if run_id sequence is broken
+            if force_restart:
                 is_restart = True
+                # Clear the flag after using it
+                if "_global" not in state:
+                    state["_global"] = {}
+                state["_global"]["force_restart_report"] = False
+                save_state(state)
+            elif time_diff > 300:  # 5 minutes (more lenient for manual restarts)
+                is_restart = True
+            elif last_run_id:
+                # Check if run_id sequence is broken (indicates restart)
+                try:
+                    last_run_dt = datetime.strptime(last_run_id[:8] + last_run_id[9:], "%Y%m%d%H%M%S")
+                    current_run_dt = datetime.strptime(run_id[:8] + run_id[9:], "%Y%m%d%H%M%S")
+                    # If time difference is more than 5 minutes, it's a restart
+                    if (current_run_dt - last_run_dt).total_seconds() > 300:
+                        is_restart = True
+                except Exception:
+                    pass
         except Exception:
             # If parsing fails, check if state file exists but is old
             is_restart = True
