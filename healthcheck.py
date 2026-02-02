@@ -134,6 +134,60 @@ def now_local_str() -> str:
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
+def cleanup_old_files() -> None:
+    """Clean up old log files and state data (older than 7 days)"""
+    cutoff_date = datetime.now() - timedelta(days=7)
+    
+    # Clean up old log files
+    try:
+        if os.path.isdir(LOG_DIR):
+            for filename in os.listdir(LOG_DIR):
+                if filename.endswith(".log"):
+                    filepath = os.path.join(LOG_DIR, filename)
+                    try:
+                        # Parse date from filename (YYYY-MM-DD.log)
+                        date_str = filename.replace(".log", "")
+                        file_date = datetime.strptime(date_str, "%Y-%m-%d")
+                        if file_date < cutoff_date:
+                            os.remove(filepath)
+                            append_log(f"[{now_local_str()}] cleanup: removed old log file {filename}")
+                    except (ValueError, OSError) as e:
+                        # Skip files that don't match date pattern or can't be deleted
+                        pass
+    except Exception as e:
+        append_log(f"[{now_local_str()}] cleanup: error cleaning log files: {repr(e)}")
+    
+    # Clean up old state data (keep only last 7 days of check history)
+    try:
+        state = load_state()
+        global_state = state.get("_global", {})
+        check_history = global_state.get("_check_history", [])
+        
+        if check_history:
+            cutoff_ts = cutoff_date.strftime("%Y-%m-%d %H:%M:%S")
+            filtered_history = []
+            removed_count = 0
+            
+            for entry in check_history:
+                entry_ts = entry.get("ts", "")
+                try:
+                    entry_dt = datetime.strptime(entry_ts, "%Y-%m-%d %H:%M:%S")
+                    if entry_dt >= cutoff_date:
+                        filtered_history.append(entry)
+                    else:
+                        removed_count += 1
+                except Exception:
+                    # Keep entries with invalid timestamps
+                    filtered_history.append(entry)
+            
+            if removed_count > 0:
+                global_state["_check_history"] = filtered_history
+                state["_global"] = global_state
+                save_state(state)
+                append_log(f"[{now_local_str()}] cleanup: removed {removed_count} old check history entries")
+    except Exception as e:
+        append_log(f"[{now_local_str()}] cleanup: error cleaning state data: {repr(e)}")
+
 def parse_time_str(time_str: str) -> Tuple[int, int]:
     """Parse time string 'HH:MM' to (hour, minute)"""
     try:
@@ -1013,6 +1067,11 @@ def main() -> None:
     current_time = now_local_str()
 
     append_log(f"[{now_local_str()}] run_id={run_id} start host={host}")
+    
+    # Clean up old files (once per day, check at start of hour)
+    now = datetime.now()
+    if now.minute < 3:  # Only run cleanup during first 3 minutes of each hour
+        cleanup_old_files()
 
     # Check for restart (gap in execution)
     state = load_state()
