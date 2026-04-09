@@ -1494,6 +1494,15 @@ def main() -> None:
         update_endpoint_state(state, r)
 
     has_issue_now = any(not r.ok for r in results)
+
+    # Compare against previous run's g["has_issue"] (still from load_state). If we set
+    # g["has_issue"] before this call, prev_has_issue always equals has_issue_now and
+    # issue_detected / issue_resolved never fire correctly.
+    notify, reason = should_notify(results, state)
+    if is_restart:
+        notify = True
+        reason = "restart_detected"
+
     g = get_global_state(state)
     g["has_issue"] = has_issue_now
     g["last_check"] = now_local_str()
@@ -1521,11 +1530,6 @@ def main() -> None:
             ensure_ascii=False,
         )
     )
-
-    notify, reason = should_notify(results, state)
-    if is_restart:
-        notify = True
-        reason = "restart_detected"
 
     append_log(f"[{now_local_str()}] run_id={run_id} notify={notify} reason={reason}")
     save_state(state)
