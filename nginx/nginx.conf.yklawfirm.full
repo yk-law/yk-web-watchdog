@@ -576,8 +576,8 @@ http {
 	# 로그 용량: Nginx만으로는 로그 삭제·회전 불가. 동일 레포의 logrotate-yklawfirm.conf 로
 	# access.log / error.log 를 일별·maxsize 초과 시 회전·압축·보관 개수 제한(rotate).
 	#
-	# 집계: 마지막 필드가 공백 구분. 예) awk '$NF=="MISS"' access.log
-	#   또는 grep -E ' (MISS|HIT) ' (앞뒤 문맥에 따라 조정)
+	# 집계: User-Agent에 공백이 많아 awk 기본 $NF 는 캐시 상태가 아님. 줄 끝 패턴으로 세기:
+	#   grep -cE ' MISS$' access.log   /   grep -oE ' (MISS|HIT|STALE|-)$' access.log | sort | uniq -c
 	##
 	log_format combined_cache '$remote_addr - $remote_user [$time_local] '
 		'"$request" $status $body_bytes_sent '
@@ -808,7 +808,8 @@ http {
 	# proxy_cache <ZONE>        : 상단 proxy_cache_path 의 keys_zone 이름과 일치
 	# proxy_cache_methods     : GET, HEAD 만 캐시 (POST 등은 통과만)
 	# proxy_cache_valid 200   : 200 응답 30일 유효
-	# proxy_cache_valid 301 302 : 리다이렉트 응답은 1시간 (필요 시 조정)
+	# proxy_cache_valid 301 302 308 : 리다이렉트·영구 리다이렉트(308) 응답은 1시간 (Mobon 예약 URL 등)
+	# proxy_cache_valid 404   : 동일 구(舊) URL·깨진 _next 해시 등으로 봇이 같은 404를 반복 때 업스트림 부하 완화 (TTL 짧게)
 	# proxy_cache_use_stale   : 업스트림 오류/타임아웃/갱신 중일 때 오래된 캐시 제공
 	# proxy_cache_lock        : 동일 키에 대해 한 worker만 원본 갱신 (캐시 스탬피드 완화)
 	# proxy_cache_lock_timeout: 락 대기 상한
@@ -929,7 +930,8 @@ http {
 			proxy_cache BRAND_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -996,7 +998,8 @@ http {
 			proxy_cache CRIME_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1057,7 +1060,8 @@ http {
 			proxy_cache DIVORCE_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1118,7 +1122,8 @@ http {
 			proxy_cache CIVIL_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1179,7 +1184,8 @@ http {
 			proxy_cache ASSAULT_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1240,7 +1246,8 @@ http {
 			proxy_cache INHERIT_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1301,7 +1308,8 @@ http {
 			proxy_cache DRUG_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1362,7 +1370,8 @@ http {
 			proxy_cache TRAFFIC_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
@@ -1423,7 +1432,8 @@ http {
 			proxy_cache SCHOOL_CACHE;
 			proxy_cache_methods GET HEAD;
 			proxy_cache_valid 200 30d;
-			proxy_cache_valid 301 302 1h;
+			proxy_cache_valid 301 302 308 1h;
+			proxy_cache_valid 404 5m;
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
