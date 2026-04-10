@@ -3,10 +3,10 @@
 #
 # 구성 요약:
 #   - Azure VM, worker 사용자 azure
-#   - 사이트별 Next.js (127.0.0.1:3000~3008) 리버스 프록시 + 디스크 proxy_cache
+#   - 사이트별 Next.js (upstream next_* → 127.0.0.1:3000~3008, keepalive) 리버스 프록시 + 디스크 proxy_cache
 #   - 구 도메인/경로 리다이렉트는 include 및 map(if)로 처리
 #   - 캐시 키: $uri + 추적 파라미터 제거한 쿼리 ($cache_query_string)
-#   - 캐시 적중 여부: 응답 헤더 X-Cache-Status, 전용 access_log cache-access.log
+#   - 캐시 적중 여부: 응답 헤더 X-Cache-Status, access.log(combined_cache) 마지막 필드 $upstream_cache_status
 # =============================================================================
 
 # 프로세스가 root로 기동될 때만 의미 있음. 일반 reload 시 무시될 수 있음.
@@ -50,6 +50,21 @@ http {
 	proxy_cache_path /data/nginx_cache/drug levels=1:2 keys_zone=DRUG_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
 	proxy_cache_path /data/nginx_cache/traffic levels=1:2 keys_zone=TRAFFIC_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
 	proxy_cache_path /data/nginx_cache/school levels=1:2 keys_zone=SCHOOL_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
+
+	##
+	# Next.js 업스트림 (포트별) + keepalive
+	# - 정시 트래픽 스파이크 시 127.0.0.1 로 매 요청마다 새 연결을 맺으면 CPU·커널 부하가 커짐.
+	# - location / 에서 proxy_http_version 1.1; proxy_set_header Connection ""; 와 함께 쓰임.
+	##
+	upstream next_brand   { server 127.0.0.1:3000; keepalive 32; }
+	upstream next_crime   { server 127.0.0.1:3001; keepalive 32; }
+	upstream next_divorce { server 127.0.0.1:3002; keepalive 32; }
+	upstream next_civil   { server 127.0.0.1:3003; keepalive 32; }
+	upstream next_assault { server 127.0.0.1:3004; keepalive 32; }
+	upstream next_inherit { server 127.0.0.1:3005; keepalive 32; }
+	upstream next_drug    { server 127.0.0.1:3006; keepalive 32; }
+	upstream next_traffic { server 127.0.0.1:3007; keepalive 32; }
+	upstream next_school  { server 127.0.0.1:3008; keepalive 32; }
 
 	# map 지시어 해시 테이블 크기. 키(문자열)가 많을 때 bucket/ max 조정.
 	map_hash_bucket_size 256;
@@ -411,32 +426,21 @@ http {
 	}
 
 	##
-	# 캐시 분석 전용 access 로그 포맷
+	# access.log 포맷: 표준 combined + 마지막 칼럼 $upstream_cache_status
 	#
 	# $upstream_cache_status 주요 값:
-	#   MISS     — 캐시에 없어 업스트림에서 가져옴
-	#   HIT      — 캐시에서 즉시 응답
-	#   STALE    — 만료됐으나 proxy_cache_use_stale 조건으로 오래된 캐시 제공
-	#   UPDATING — 백그라운드 갱신 중 stale 응답
-	#   REVALIDATED — 재검증 후 304 등
-	#   BYPASS   — 캐시 사용 안 함
-	#   EXPIRED  — 캐시 만료로 재검증/재요청
+	#   MISS, HIT, STALE, UPDATING, REVALIDATED, BYPASS, EXPIRED, - (프록시 캐시 미사용 location 등)
 	#
-	# 로그 용량: Nginx만으로는 로그 삭제·회전 불가. 동일 레포의 logrotate-yklawfirm.conf 를
-	# VM 의 /etc/logrotate.d/ 에 배포해 access.log / cache-access.log / error.log 를
-	# 일별·maxsize 초과 시 회전·압축·보관 개수 제한(rotate).
-	# cache-access.log 는 VM에서 생성·쓰기 가능해야 하며, 기본 nginx logrotate 와 경로가 겹치면 규칙 통합.
+	# 로그 용량: Nginx만으로는 로그 삭제·회전 불가. 동일 레포의 logrotate-yklawfirm.conf 로
+	# access.log / error.log 를 일별·maxsize 초과 시 회전·압축·보관 개수 제한(rotate).
 	#
-	# 집계 팁: 필드 구분은 탭(\\t). Ubuntu 의 sudo sh -c 는 dash 이라 bash 전용 $'\\t' 가 동작하지 않아
-	# grep -c $'\\tcache=MISS\\t' 가 0이 될 수 있음 → MISS 는 grep -F 'cache=MISS' 등으로 세는 것이 안전.
+	# 집계: 마지막 필드가 공백 구분. 예) awk '$NF=="MISS"' access.log
+	#   또는 grep -E ' (MISS|HIT) ' (앞뒤 문맥에 따라 조정)
 	##
-	log_format cache_status '$time_iso8601\t$server_name\t'
-		'"$request"\t$status\t'
-		'cache=$upstream_cache_status\t'
-		'request_time=$request_time\t'
-		'upstream_time=$upstream_response_time\t'
-		'bytes=$body_bytes_sent\t'
-		'"$http_user_agent"';
+	log_format combined_cache '$remote_addr - $remote_user [$time_local] '
+		'"$request" $status $body_bytes_sent '
+		'"$http_referer" "$http_user_agent" '
+		'$upstream_cache_status';
 
 	gzip on;
 
@@ -544,7 +548,7 @@ http {
 			kakao-4.yklawfirm.co.kr kakao-5.yklawfirm.co.kr kakao-6.yklawfirm.co.kr
 			kakao-7.yklawfirm.co.kr kakao-8.yklawfirm.co.kr kakao-9.yklawfirm.co.kr
 			kakao-10.yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		root /etc/nginx/kakao-bridge/internal;
 		index kakao-bridge.html;
@@ -565,7 +569,7 @@ http {
 	server {
 		listen 80;
 		server_name kakao-blog.yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		root /etc/nginx/kakao-bridge/external;
 		index kakao-bridge.html;
@@ -583,7 +587,7 @@ http {
 	server {
 		listen 80;
 		server_name kakao-cafe.yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		root /etc/nginx/kakao-bridge/external;
 		index kakao-bridge.html;
@@ -601,7 +605,7 @@ http {
 	server {
 		listen 80;
 		server_name kakao-daangn.yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		root /etc/nginx/kakao-bridge/external;
 		index kakao-bridge.html;
@@ -619,7 +623,7 @@ http {
 	server {
 		listen 80;
 		server_name kakao-kin.yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		root /etc/nginx/kakao-bridge/external;
 		index kakao-bridge.html;
@@ -640,22 +644,20 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm.co.kr$request_uri;
 	}
 
 	##
 	# BRAND — 메인 사이트 www.yklawfirm.co.kr
 	#
-	# access_log 두 줄:
-	#   1) combined + if=$loggable — 기존과 동일하게 200/206 제외 가능
-	#   2) cache_status — 모든 상태 코드 기록, cache= 필드로 HIT/MISS 등 집계
+	# access_log: combined_cache + if=$loggable — 200/206 제외 가능, 마지막 필드로 캐시 상태
 	#
 	# absolute_redirect off / port_in_redirect off :
 	#   리다이렉트 Location 헤더에 스킴·포트를 강제로 붙이지 않게 함 (리버스 프록시 뒤에서 유용)
 	#
 	# 구 URL 리다이렉트 후 include 파일의 if 변수로 추가 301 가능.
-	# Next.js 는 127.0.0.1:3000.
+	# Next.js 는 upstream next_brand 등으로 127.0.0.1:3000~3008.
 	##
 
 	##
@@ -668,6 +670,8 @@ http {
 	# proxy_cache_use_stale   : 업스트림 오류/타임아웃/갱신 중일 때 오래된 캐시 제공
 	# proxy_cache_lock        : 동일 키에 대해 한 worker만 원본 갱신 (캐시 스탬피드 완화)
 	# proxy_cache_lock_timeout: 락 대기 상한
+	# proxy_cache_background_update : 만료·재검증 시 백그라운드로 원본 갱신(1.11.5+). 정시 MISS 폭주 시 업스트림 부하 완화에 도움.
+	# upstream … keepalive + proxy_http_version 1.1 + Connection "" : Next 로의 연결 재사용.
 	#
 	# proxy_ignore_headers Cache-Control Expires Set-Cookie :
 	#   Next.js 가 no-store 등을 줘도 nginx 가 캐시에 저장하도록 무시 (정책상 필요할 때만)
@@ -686,8 +690,7 @@ http {
 		listen 80;
 		server_name www.yklawfirm.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
@@ -776,7 +779,10 @@ http {
 		####### 리다이렉트 끝 #######
 
 		location / {
-			proxy_pass http://127.0.0.1:3000;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_brand;
 
 			proxy_cache BRAND_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -785,6 +791,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -825,7 +832,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-crime.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-crime.co.kr$request_uri;
 	}
 
@@ -833,14 +840,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-crime.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3001;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_crime;
 
 			proxy_cache CRIME_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -849,6 +858,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -883,7 +893,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-divorce.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-divorce.co.kr$request_uri;
 	}
 
@@ -891,14 +901,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-divorce.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3002;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_divorce;
 
 			proxy_cache DIVORCE_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -907,6 +919,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -941,7 +954,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-civil.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-civil.co.kr$request_uri;
 	}
 
@@ -949,14 +962,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-civil.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3003;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_civil;
 
 			proxy_cache CIVIL_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -965,6 +980,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -999,7 +1015,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-assault.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-assault.co.kr$request_uri;
 	}
 
@@ -1007,14 +1023,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-assault.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3004;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_assault;
 
 			proxy_cache ASSAULT_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -1023,6 +1041,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -1057,7 +1076,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-inherit.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-inherit.co.kr$request_uri;
 	}
 
@@ -1065,14 +1084,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-inherit.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3005;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_inherit;
 
 			proxy_cache INHERIT_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -1081,6 +1102,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -1115,7 +1137,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-drug.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-drug.co.kr$request_uri;
 	}
 
@@ -1123,14 +1145,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-drug.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3006;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_drug;
 
 			proxy_cache DRUG_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -1139,6 +1163,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -1173,7 +1198,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-traffic.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-traffic.co.kr$request_uri;
 	}
 
@@ -1181,14 +1206,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-traffic.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3007;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_traffic;
 
 			proxy_cache TRAFFIC_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -1197,6 +1224,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
@@ -1231,7 +1259,7 @@ http {
 	server {
 		listen 80;
 		server_name yklawfirm-school.co.kr;
-		access_log /var/log/nginx/access.log combined if=$loggable;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 		return 301 https://www.yklawfirm-school.co.kr$request_uri;
 	}
 
@@ -1239,14 +1267,16 @@ http {
 		listen 80;
 		server_name www.yklawfirm-school.co.kr;
 
-		access_log /var/log/nginx/access.log combined if=$loggable;
-		access_log /var/log/nginx/cache-access.log cache_status;
+		access_log /var/log/nginx/access.log combined_cache if=$loggable;
 
 		absolute_redirect off;
 		port_in_redirect off;
 
 		location / {
-			proxy_pass http://127.0.0.1:3008;
+			proxy_http_version 1.1;
+			proxy_set_header Connection "";
+
+			proxy_pass http://next_school;
 
 			proxy_cache SCHOOL_CACHE;
 			proxy_cache_methods GET HEAD;
@@ -1255,6 +1285,7 @@ http {
 			proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
 			proxy_cache_lock on;
 			proxy_cache_lock_timeout 10s;
+			proxy_cache_background_update on;
 
 			proxy_ignore_headers Cache-Control Expires Set-Cookie;
 			proxy_hide_header Set-Cookie;
