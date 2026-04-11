@@ -87,6 +87,9 @@ CLEANUP_DAYS = env_int("CLEANUP_DAYS", 7)
 DAILY_REPORT_ENABLED = env_bool("DAILY_REPORT_ENABLED", True)
 DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 
+# 정상 상태일 때 1시간마다 슬랙 생존 확인(환경변수 불필요, REPORT_MODE=always 는 매 실행 알림이 있어 생략).
+OK_HEARTBEAT_INTERVAL_SEC = 3600
+
 CERT_WARN_DAYS = env_int("CERT_WARN_DAYS", 30)
 CERT_ALERT_DAYS = env_int("CERT_ALERT_DAYS", 7)
 HEADER_KEYS = [
@@ -1436,6 +1439,76 @@ def should_notify(results: List[EndpointResult], state: Dict[str, Any]) -> Tuple
     return (len(changed) > 0), ("; ".join(changed) if changed else "no_change")
 
 
+def ok_heartbeat_seconds_since_last(
+    g: Dict[str, Any], current_time_str: str
+) -> Optional[float]:
+    last = g.get("last_ok_heartbeat_sent_at")
+    if not last:
+        return None
+    try:
+        last_dt = datetime.strptime(str(last), "%Y-%m-%d %H:%M:%S")
+        cur_dt = datetime.strptime(current_time_str, "%Y-%m-%d %H:%M:%S")
+        return (cur_dt - last_dt).total_seconds()
+    except Exception:
+        return None
+
+
+def maybe_run_ok_heartbeat_slack(
+    state: Dict[str, Any],
+    results: List[EndpointResult],
+    *,
+    run_id: str,
+    host: str,
+    current_time: str,
+    notify: bool,
+    has_issue_now: bool,
+) -> None:
+    if has_issue_now or notify or REPORT_MODE == "always":
+        return
+
+    g = get_global_state(state)
+    elapsed = ok_heartbeat_seconds_since_last(g, current_time)
+    if elapsed is None:
+        g["last_ok_heartbeat_sent_at"] = current_time
+        save_state(state)
+        append_log(
+            f"[{now_local_str()}] run_id={run_id} ok_heartbeat=clock_started at={current_time}"
+        )
+        return
+
+    if elapsed < OK_HEARTBEAT_INTERVAL_SEC:
+        return
+
+    try:
+        text = build_ok_heartbeat_text(results, run_id, host)
+        slack_post_text_batched(
+            build_slack_prefix(results, False) + text,
+            attach_image=False,
+        )
+        g["last_ok_heartbeat_sent_at"] = current_time
+        save_state(state)
+        append_log(f"[{now_local_str()}] run_id={run_id} ok_heartbeat=sent")
+    except Exception as exc:
+        append_log(
+            f"[{now_local_str()}] run_id={run_id} ok_heartbeat=failed err={repr(exc)}"
+        )
+
+
+def build_ok_heartbeat_text(
+    results: List[EndpointResult], run_id: str, host: str
+) -> str:
+    lines = [
+        "*\ubaa8\ub2c8\ud130\ub9c1 \uc815\uc0c1*",
+        f"\uc8fc\uae30\uc801 \ud5ec\uc2a4\uccb4\ud06c\uac00 \uc9c0\uc18d \uc2e4\ud589 \uc911\uc774\uba70, \ubaa8\ub4e0 \uc5d4\ub4dc\ud3ec\uc778\ud2b8 \uac80\uc0ac \uc774\uc0c1 \uc5c6\uc74c.",
+        f"run `{run_id}` \u00b7 host `{host}` \u00b7 `{now_local_str()}`",
+        f"\uc5d4\ub4dc\ud3ec\uc778\ud2b8 `{len(results)}`\uac1c \u00b7 \uc815\uc0c1 \uc54c\ub9bc \uac04\uaca9 \uc57d `{OK_HEARTBEAT_INTERVAL_SEC // 60}`\ubd84",
+        "",
+    ]
+    for site_label, items in group_endpoint_results(results):
+        lines.append(f"*{site_label}*  {site_composite_headline(items)}")
+    return "\n".join(lines).strip()
+
+
 # =========================================================
 # Slack helpers
 # =========================================================
@@ -1678,6 +1751,16 @@ def main() -> None:
     append_log(f"[{now_local_str()}] run_id={run_id} notify={notify} reason={reason}")
     save_state(state)
 
+    maybe_run_ok_heartbeat_slack(
+        state,
+        results,
+        run_id=run_id,
+        host=host,
+        current_time=current_time,
+        notify=notify,
+        has_issue_now=has_issue_now,
+    )
+
     if not notify:
         append_log(f"[{now_local_str()}] run_id={run_id} end (no notify)")
         return
@@ -1713,6 +1796,9 @@ def main() -> None:
             attach_image=bool(SLACK_IMAGE_URL and SLACK_POST_MODE == "json"),
         )
         append_log(f"[{now_local_str()}] run_id={run_id} slack=sent")
+        if not has_issue_now:
+            g["last_ok_heartbeat_sent_at"] = current_time
+            save_state(state)
     except Exception as exc:
         append_log(f"[{now_local_str()}] run_id={run_id} slack=failed err={repr(exc)}")
 
