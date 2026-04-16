@@ -37,19 +37,19 @@ http {
 	#
 	# levels=1:2  : 캐시 파일을 2단 하위 디렉터리에 분산 (inode/디렉터리 부하 완화)
 	# keys_zone=NAME:size : 메모리에 메타데이터(키·만료 등) 보관. size는 zone 크기.
-	# inactive=60m : 해당 기간 접근 없으면 디스크 항목 제거 (LRU 성격)
+	# inactive=1M : 해당 기간 접근 없으면 디스크 항목 제거 (LRU 성격)
 	# max_size=10g : 디스크 캐시 상한 (존당, 초과 시 오래된 것부터 정리)
 	# use_temp_path=off : 임시 파일을 캐시와 같은 파일시스템에 두어 rename 비용 감소
 	##
-	proxy_cache_path /data/nginx_cache/brand levels=1:2 keys_zone=BRAND_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/crime levels=1:2 keys_zone=CRIME_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/divorce levels=1:2 keys_zone=DIVORCE_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/civil levels=1:2 keys_zone=CIVIL_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/assault levels=1:2 keys_zone=ASSAULT_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/inherit levels=1:2 keys_zone=INHERIT_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/drug levels=1:2 keys_zone=DRUG_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/traffic levels=1:2 keys_zone=TRAFFIC_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
-	proxy_cache_path /data/nginx_cache/school levels=1:2 keys_zone=SCHOOL_CACHE:256m inactive=60m max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/brand levels=1:2 keys_zone=BRAND_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/crime levels=1:2 keys_zone=CRIME_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/divorce levels=1:2 keys_zone=DIVORCE_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/civil levels=1:2 keys_zone=CIVIL_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/assault levels=1:2 keys_zone=ASSAULT_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/inherit levels=1:2 keys_zone=INHERIT_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/drug levels=1:2 keys_zone=DRUG_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/traffic levels=1:2 keys_zone=TRAFFIC_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
+	proxy_cache_path /data/nginx_cache/school levels=1:2 keys_zone=SCHOOL_CACHE:256m inactive=1M max_size=10g use_temp_path=off;
 
 	##
 	# Next.js 업스트림 (포트별) + keepalive
