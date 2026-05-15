@@ -89,8 +89,16 @@ CLEANUP_DAYS = env_int("CLEANUP_DAYS", 7)
 DAILY_REPORT_ENABLED = env_bool("DAILY_REPORT_ENABLED", True)
 DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 
-# 정상 상태일 때 1시간마다 슬랙 생존 확인(환경변수 불필요, REPORT_MODE=always 는 매 실행 알림이 있어 생략).
-OK_HEARTBEAT_INTERVAL_SEC = 3600
+# Notification policy (checks run every ~3 min via systemd; Slack is separate):
+# - All OK: heartbeat only, every OK_HEARTBEAT_INTERVAL_SEC (default 1h).
+# - First failure: alert immediately (issue_detected).
+# - Still failing after ISSUE_REPEAT_MIN_FAILURES consecutive checks: alert again, then
+#   every ISSUE_REMINDER_INTERVAL_SEC until recovered (issue_persists).
+# - Recovery: one alert (issue_resolved).
+# REPORT_MODE=always sends on every check (not recommended).
+OK_HEARTBEAT_INTERVAL_SEC = env_int("OK_HEARTBEAT_INTERVAL_SEC", 3600)
+ISSUE_REPEAT_MIN_FAILURES = env_int("ISSUE_REPEAT_MIN_FAILURES", 2)
+ISSUE_REMINDER_INTERVAL_SEC = env_int("ISSUE_REMINDER_INTERVAL_SEC", 180)
 
 CERT_WARN_DAYS = env_int("CERT_WARN_DAYS", 30)
 CERT_ALERT_DAYS = env_int("CERT_ALERT_DAYS", 7)
@@ -1479,8 +1487,39 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
 # =========================================================
 # Notification rules
 # =========================================================
+def max_consecutive_failures(results: List[EndpointResult]) -> int:
+    failing = [r for r in results if not r.ok]
+    if not failing:
+        return 0
+    return max(r.consecutive_failures for r in failing)
+
+
+def seconds_since_timestamp(current_time_str: str, last_time_str: Any) -> Optional[float]:
+    if not last_time_str:
+        return None
+    try:
+        last_dt = datetime.strptime(str(last_time_str), "%Y-%m-%d %H:%M:%S")
+        cur_dt = datetime.strptime(current_time_str, "%Y-%m-%d %H:%M:%S")
+        return (cur_dt - last_dt).total_seconds()
+    except Exception:
+        return None
+
+
+def issue_reminder_due(g: Dict[str, Any], current_time_str: str) -> bool:
+    elapsed = seconds_since_timestamp(current_time_str, g.get("last_issue_alert_at"))
+    if elapsed is None:
+        return True
+    return elapsed >= ISSUE_REMINDER_INTERVAL_SEC
+
+
+def mark_issue_alert_sent(g: Dict[str, Any], current_time_str: str) -> None:
+    g["last_issue_alert_at"] = current_time_str
+
+
 def should_notify(
-    results: List[EndpointResult], state: Dict[str, Any]
+    results: List[EndpointResult],
+    state: Dict[str, Any],
+    current_time_str: str,
 ) -> Tuple[bool, str]:
     if REPORT_MODE == "always":
         return True, "always"
@@ -1488,14 +1527,20 @@ def should_notify(
     g = get_global_state(state)
     has_issue_now = any(not r.ok for r in results)
     prev_has_issue = bool(g.get("has_issue", False))
+    max_cf = max_consecutive_failures(results)
 
     if REPORT_MODE == "on_error":
-        if has_issue_now and not prev_has_issue:
-            return True, "issue_detected"
-        if has_issue_now and prev_has_issue:
-            return True, "issue_persists"
         if not has_issue_now and prev_has_issue:
             return True, "issue_resolved"
+        if has_issue_now and not prev_has_issue:
+            # First failed check while previously healthy — alert immediately.
+            return True, "issue_detected"
+        if has_issue_now and prev_has_issue:
+            if max_cf < ISSUE_REPEAT_MIN_FAILURES:
+                return False, "issue_awaiting_repeat_threshold"
+            if issue_reminder_due(g, current_time_str):
+                return True, "issue_persists"
+            return False, "issue_reminder_throttled"
         return False, "all_ok"
 
     changed = []
@@ -1514,15 +1559,7 @@ def should_notify(
 def ok_heartbeat_seconds_since_last(
     g: Dict[str, Any], current_time_str: str
 ) -> Optional[float]:
-    last = g.get("last_ok_heartbeat_sent_at")
-    if not last:
-        return None
-    try:
-        last_dt = datetime.strptime(str(last), "%Y-%m-%d %H:%M:%S")
-        cur_dt = datetime.strptime(current_time_str, "%Y-%m-%d %H:%M:%S")
-        return (cur_dt - last_dt).total_seconds()
-    except Exception:
-        return None
+    return seconds_since_timestamp(current_time_str, g.get("last_ok_heartbeat_sent_at"))
 
 
 def maybe_run_ok_heartbeat_slack(
@@ -1808,8 +1845,8 @@ def main() -> None:
     # Compare against previous run's g["has_issue"] (still from load_state). If we set
     # g["has_issue"] before this call, prev_has_issue always equals has_issue_now and
     # issue_detected / issue_resolved never fire correctly.
-    notify, reason = should_notify(results, state)
-    if is_restart:
+    notify, reason = should_notify(results, state, current_time)
+    if is_restart and has_issue_now:
         notify = True
         reason = "restart_detected"
 
@@ -1891,9 +1928,11 @@ def main() -> None:
             attach_image=bool(SLACK_IMAGE_URL and SLACK_POST_MODE == "json"),
         )
         append_log(f"[{now_local_str()}] run_id={run_id} slack=sent")
-        if not has_issue_now:
+        if has_issue_now:
+            mark_issue_alert_sent(g, current_time)
+        else:
             g["last_ok_heartbeat_sent_at"] = current_time
-            save_state(state)
+        save_state(state)
     except Exception as exc:
         append_log(f"[{now_local_str()}] run_id={run_id} slack=failed err={repr(exc)}")
 
