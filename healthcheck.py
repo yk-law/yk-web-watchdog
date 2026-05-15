@@ -104,182 +104,74 @@ HEADER_KEYS = [
 
 
 # =========================================================
-# Endpoint config
-# External VM only: redirect/service checks only
+# Endpoint config (external VM: bare domain redirect + www host service)
 # =========================================================
-DEFAULT_ENDPOINTS = [
-    {
-        "name": "brand-apex",
-        "display_name": "yklawfirm.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm.co.kr/",
-        "dns_host": "yklawfirm.co.kr",
-        "ssl_host": "yklawfirm.co.kr",
-    },
-    {
-        "name": "brand-www",
-        "display_name": "www.yklawfirm.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm.co.kr",
-        "ssl_host": "www.yklawfirm.co.kr",
-    },
-    {
-        "name": "crime-apex",
-        "display_name": "yklawfirm-crime.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-crime.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-crime.co.kr/",
-        "dns_host": "yklawfirm-crime.co.kr",
-        "ssl_host": "yklawfirm-crime.co.kr",
-    },
-    {
-        "name": "crime-www",
-        "display_name": "www.yklawfirm-crime.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-crime.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-crime.co.kr",
-        "ssl_host": "www.yklawfirm-crime.co.kr",
-    },
-    {
-        "name": "divorce-apex",
-        "display_name": "yklawfirm-divorce.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-divorce.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-divorce.co.kr/",
-        "dns_host": "yklawfirm-divorce.co.kr",
-        "ssl_host": "yklawfirm-divorce.co.kr",
-    },
-    {
-        "name": "divorce-www",
-        "display_name": "www.yklawfirm-divorce.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-divorce.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-divorce.co.kr",
-        "ssl_host": "www.yklawfirm-divorce.co.kr",
-    },
-    {
-        "name": "civil-apex",
-        "display_name": "yklawfirm-civil.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-civil.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-civil.co.kr/",
-        "dns_host": "yklawfirm-civil.co.kr",
-        "ssl_host": "yklawfirm-civil.co.kr",
-    },
-    {
-        "name": "civil-www",
-        "display_name": "www.yklawfirm-civil.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-civil.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-civil.co.kr",
-        "ssl_host": "www.yklawfirm-civil.co.kr",
-    },
-    {
-        "name": "assault-apex",
-        "display_name": "yklawfirm-assault.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-assault.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-assault.co.kr/",
-        "dns_host": "yklawfirm-assault.co.kr",
-        "ssl_host": "yklawfirm-assault.co.kr",
-    },
-    {
-        "name": "assault-www",
-        "display_name": "www.yklawfirm-assault.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-assault.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-assault.co.kr",
-        "ssl_host": "www.yklawfirm-assault.co.kr",
-    },
-    {
-        "name": "inherit-apex",
-        "display_name": "yklawfirm-inherit.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-inherit.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-inherit.co.kr/",
-        "dns_host": "yklawfirm-inherit.co.kr",
-        "ssl_host": "yklawfirm-inherit.co.kr",
-    },
-    {
-        "name": "inherit-www",
-        "display_name": "www.yklawfirm-inherit.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-inherit.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-inherit.co.kr",
-        "ssl_host": "www.yklawfirm-inherit.co.kr",
-    },
-    {
-        "name": "drug-apex",
-        "display_name": "yklawfirm-drug.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-drug.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-drug.co.kr/",
-        "dns_host": "yklawfirm-drug.co.kr",
-        "ssl_host": "yklawfirm-drug.co.kr",
-    },
-    {
-        "name": "drug-www",
-        "display_name": "www.yklawfirm-drug.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-drug.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-drug.co.kr",
-        "ssl_host": "www.yklawfirm-drug.co.kr",
-    },
-    {
-        "name": "traffic-apex",
-        "display_name": "yklawfirm-traffic.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-traffic.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-traffic.co.kr/",
-        "dns_host": "yklawfirm-traffic.co.kr",
-        "ssl_host": "yklawfirm-traffic.co.kr",
-    },
-    {
-        "name": "traffic-www",
-        "display_name": "www.yklawfirm-traffic.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-traffic.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-traffic.co.kr",
-        "ssl_host": "www.yklawfirm-traffic.co.kr",
-    },
-    {
-        "name": "school-apex",
-        "display_name": "yklawfirm-school.co.kr",
-        "type": "redirect",
-        "url": "https://yklawfirm-school.co.kr/",
-        "expect_status": [301, 302, 307, 308],
-        "expect_location_prefix": "https://www.yklawfirm-school.co.kr/",
-        "dns_host": "yklawfirm-school.co.kr",
-        "ssl_host": "yklawfirm-school.co.kr",
-    },
-    {
-        "name": "school-www",
-        "display_name": "www.yklawfirm-school.co.kr",
-        "type": "service",
-        "url": "https://www.yklawfirm-school.co.kr/",
-        "expect_status": [200],
-        "dns_host": "www.yklawfirm-school.co.kr",
-        "ssl_host": "www.yklawfirm-school.co.kr",
-    },
+ENDPOINT_SUFFIX_BARE = "-bare"  # hostname without www (e.g. example.com)
+ENDPOINT_SUFFIX_WWW = "-www"  # hostname with www (e.g. www.example.com)
+LEGACY_SUFFIX_APEX = "-apex"
+LEGACY_SUFFIX_ROOT = "-root"
+LEGACY_SUFFIX_PRIMARY = "-primary"
+
+REDIRECT_EXPECT_STATUS = [301, 302, 307, 308]
+SERVICE_EXPECT_STATUS = [200]
+
+LABEL_BARE = "Bare domain (no www) → redirect"
+LABEL_WWW = "WWW host (direct)"
+LABEL_BARE_SHORT = "bare→www"
+LABEL_WWW_SHORT = "www"
+
+# (site_key, bare hostname, www hostname)
+SITE_HOSTS: List[Tuple[str, str, str]] = [
+    ("brand", "yklawfirm.co.kr", "www.yklawfirm.co.kr"),
+    ("crime", "yklawfirm-crime.co.kr", "www.yklawfirm-crime.co.kr"),
+    ("divorce", "yklawfirm-divorce.co.kr", "www.yklawfirm-divorce.co.kr"),
+    ("civil", "yklawfirm-civil.co.kr", "www.yklawfirm-civil.co.kr"),
+    ("assault", "yklawfirm-assault.co.kr", "www.yklawfirm-assault.co.kr"),
+    ("inherit", "yklawfirm-inherit.co.kr", "www.yklawfirm-inherit.co.kr"),
+    ("drug", "yklawfirm-drug.co.kr", "www.yklawfirm-drug.co.kr"),
+    ("traffic", "yklawfirm-traffic.co.kr", "www.yklawfirm-traffic.co.kr"),
+    ("school", "yklawfirm-school.co.kr", "www.yklawfirm-school.co.kr"),
 ]
+
+
+def _endpoint_pair(site_key: str, bare_host: str, www_host: str) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": f"{site_key}{ENDPOINT_SUFFIX_BARE}",
+            "display_name": bare_host,
+            "type": "redirect",
+            "url": f"https://{bare_host}/",
+            "expect_status": REDIRECT_EXPECT_STATUS,
+            "expect_location_prefix": f"https://{www_host}/",
+            "dns_host": bare_host,
+            "ssl_host": bare_host,
+        },
+        {
+            "name": f"{site_key}{ENDPOINT_SUFFIX_WWW}",
+            "display_name": www_host,
+            "type": "service",
+            "url": f"https://{www_host}/",
+            "expect_status": SERVICE_EXPECT_STATUS,
+            "dns_host": www_host,
+            "ssl_host": www_host,
+        },
+    ]
+
+
+def _legacy_endpoint_renames() -> Dict[str, str]:
+    renames: Dict[str, str] = {}
+    for site_key, _, _ in SITE_HOSTS:
+        bare = f"{site_key}{ENDPOINT_SUFFIX_BARE}"
+        www = f"{site_key}{ENDPOINT_SUFFIX_WWW}"
+        for legacy in (LEGACY_SUFFIX_APEX, LEGACY_SUFFIX_ROOT):
+            renames[f"{site_key}{legacy}"] = bare
+        renames[f"{site_key}{LEGACY_SUFFIX_PRIMARY}"] = www
+    return renames
+
+
+DEFAULT_ENDPOINTS: List[Dict[str, Any]] = []
+for _site_key, _bare_host, _www_host in SITE_HOSTS:
+    DEFAULT_ENDPOINTS.extend(_endpoint_pair(_site_key, _bare_host, _www_host))
 
 
 def load_endpoints() -> List[Dict[str, Any]]:
@@ -392,11 +284,47 @@ def append_log(line: str) -> None:
 # =========================================================
 # State
 # =========================================================
+def _migrate_state_endpoint_keys(state: Dict[str, Any]) -> bool:
+    """Rename legacy endpoint keys (e.g. brand-apex → brand-bare) in state and history."""
+    changed = False
+    renames = _legacy_endpoint_renames()
+
+    for old, new in renames.items():
+        if old not in state or not isinstance(state.get(old), dict):
+            continue
+        if new not in state:
+            state[new] = state.pop(old)
+        else:
+            del state[old]
+        changed = True
+
+    g = state.get("_global")
+    if isinstance(g, dict):
+        history = g.get("_check_history")
+        if isinstance(history, list):
+            for entry in history:
+                results = entry.get("results")
+                if not isinstance(results, dict):
+                    continue
+                for old, new in renames.items():
+                    if old in results and new not in results:
+                        results[new] = results.pop(old)
+                        changed = True
+                    elif old in results:
+                        del results[old]
+                        changed = True
+    return changed
+
+
 def load_state() -> Dict[str, Any]:
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return data if isinstance(data, dict) else {}
+            if not isinstance(data, dict):
+                return {}
+            if _migrate_state_endpoint_keys(data):
+                save_state(data)
+            return data
     except FileNotFoundError:
         return {}
     except Exception:
@@ -1103,16 +1031,25 @@ def redirect_chain_text(chain: Optional[List[str]]) -> str:
     return " -> ".join(short_url(x) for x in chain)
 
 
+def _strip_endpoint_role_suffix(name: str) -> str:
+    for suffix in (
+        ENDPOINT_SUFFIX_BARE,
+        ENDPOINT_SUFFIX_WWW,
+        LEGACY_SUFFIX_APEX,
+        LEGACY_SUFFIX_ROOT,
+        LEGACY_SUFFIX_PRIMARY,
+    ):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def endpoint_site_group(endpoint: Dict[str, Any]) -> str:
     raw = endpoint.get("site_group")
     if raw is not None and str(raw).strip():
         return str(raw).strip()
     name = endpoint.get("name") or ""
-    if name.endswith("-apex"):
-        return name[: -len("-apex")]
-    if name.endswith("-www"):
-        return name[: -len("-www")]
-    return name
+    return _strip_endpoint_role_suffix(name) or name
 
 
 def endpoint_site_label(endpoint: Dict[str, Any]) -> str:
@@ -1125,11 +1062,11 @@ def endpoint_site_label(endpoint: Dict[str, Any]) -> str:
     return display
 
 
-def role_label_for_check(endpoint_type: str) -> str:
+def role_label_for_check(endpoint_type: str, *, short: bool = False) -> str:
     if endpoint_type == "redirect":
-        return "\ub8e8\ud2b8(apex) \u2192 www"
+        return LABEL_BARE_SHORT if short else LABEL_BARE
     if endpoint_type == "service":
-        return "www \uc9c1\uc811"
+        return LABEL_WWW_SHORT if short else LABEL_WWW
     return endpoint_type
 
 
@@ -1158,14 +1095,14 @@ def group_endpoint_results(
 
 
 def _site_check_pairs(items: List[EndpointResult]) -> List[Tuple[str, EndpointResult]]:
-    """\ud55c \uc0ac\uc774\ud2b8 \ub0b4 \ub8e8\ud2b8(apex)\u2192www / www \uc9c1\uc811 \uc810\uac80\uc744 \ud55c \ub369\uc5b4\ub9ac\ub85c \ubcf4\uc5ec \uc8fc\uae30 \uc704\ud55c \uc21c\uc11c."""
+    """Order checks per site: bare-domain redirect, then www host."""
     out: List[Tuple[str, EndpointResult]] = []
     redirect = next((x for x in items if x.type == "redirect"), None)
     service = next((x for x in items if x.type == "service"), None)
     if redirect:
-        out.append(("\ub8e8\ud2b8(apex) \u2192 www", redirect))
+        out.append((role_label_for_check("redirect"), redirect))
     if service:
-        out.append(("www \uc9c1\uc811", service))
+        out.append((role_label_for_check("service"), service))
     seen = {id(x) for _, x in out}
     for r in items:
         if id(r) in seen:
@@ -1188,28 +1125,66 @@ def result_has_cert_warning(r: EndpointResult) -> bool:
     return d < 0 or d <= CERT_WARN_DAYS
 
 
-def build_issue_summary_text(results: List[EndpointResult]) -> str:
-    lines: List[str] = ["*\uc694\uc57d (\ud604\uc7ac \ubb38\uc81c)*", ""]
+def _count_checks_by_role(results: List[EndpointResult]) -> Tuple[int, int, int, int]:
+    bare_ok = bare_fail = www_ok = www_fail = 0
+    for r in results:
+        if r.type == "redirect":
+            if r.ok:
+                bare_ok += 1
+            else:
+                bare_fail += 1
+        elif r.type == "service":
+            if r.ok:
+                www_ok += 1
+            else:
+                www_fail += 1
+    return bare_ok, bare_fail, www_ok, www_fail
+
+
+def build_footer_summary_lines(
+    results: List[EndpointResult], *, kind: str
+) -> List[str]:
+    """Short recap placed at the end of every Slack report (details come first)."""
+    pairs = group_endpoint_results(results)
+    n_checks = len(results)
+    n_sites = len(pairs)
+    n_ok = sum(1 for r in results if r.ok)
+    n_fail = n_checks - n_ok
+    sites_ok = sum(1 for _, items in pairs if all(x.ok for x in items))
+    bare_ok, bare_fail, www_ok, www_fail = _count_checks_by_role(results)
+
+    lines: List[str] = [
+        f"Sites: `{sites_ok}/{n_sites}` OK \u00b7 Checks: `{n_ok}/{n_checks}` OK",
+        (
+            f"Bare domain (no www): `{bare_ok}` OK"
+            + (f", `{bare_fail}` FAIL" if bare_fail else "")
+        ),
+        (
+            f"WWW host (direct): `{www_ok}` OK"
+            + (f", `{www_fail}` FAIL" if www_fail else "")
+        ),
+    ]
+
+    if kind == "recovery":
+        lines.insert(0, "All endpoints recovered; no active failures.")
+    elif kind in {"ok", "heartbeat"}:
+        lines.insert(0, "All endpoints healthy.")
+    elif n_fail:
+        lines.insert(0, f"Active failures: `{n_fail}` check(s) across site(s).")
+
     failed = [r for r in results if not r.ok]
     if failed:
-        lines.append("\uc2e4\ud328\ud55c \uc810\uac80:")
-        for site_label, items in group_endpoint_results(results):
+        lines.append("")
+        lines.append("Failed checks:")
+        for site_label, items in pairs:
             bad = [r for r in items if not r.ok]
             if not bad:
                 continue
             bits: List[str] = []
             for r in bad:
-                role = (
-                    "\ub8e8\ud2b8\u2192www"
-                    if r.type == "redirect"
-                    else "www" if r.type == "service" else r.type
-                )
+                role = role_label_for_check(r.type, short=True)
                 bits.append(f"{role}: `{r.summary}` \u2014 `{r.actual}`")
             lines.append(f"- *{site_label}*: " + " | ".join(bits))
-        lines.append("")
-    else:
-        lines.append("\uc2e4\ud328\ud55c \uc810\uac80: \uc5c6\uc74c")
-        lines.append("")
 
     cert_lines: List[str] = []
     for r in results:
@@ -1219,41 +1194,80 @@ def build_issue_summary_text(results: List[EndpointResult]) -> str:
         who = r.ssl_host or r.display_name or r.name
         if d is not None and d < 0:
             cert_lines.append(
-                f"- *{r.site_label}* / `{who}`: \ub9cc\ub8cc ({abs(d)}\uc77c \uc804)"
+                f"- *{r.site_label}* / `{who}`: expired ({abs(d)}d ago)"
             )
         elif d is not None:
-            lvl = "\uc784\ubc15" if d <= CERT_ALERT_DAYS else "\uc8fc\uc758"
-            cert_lines.append(
-                f"- *{r.site_label}* / `{who}`: {lvl}, \ub0a8\uc740 {d}\uc77c"
-            )
+            lvl = "critical" if d <= CERT_ALERT_DAYS else "warning"
+            cert_lines.append(f"- *{r.site_label}* / `{who}`: {lvl}, {d}d left")
 
+    lines.append("")
     if cert_lines:
-        lines.append("\uc778\uc99d\uc11c:")
+        lines.append("TLS certificate:")
         lines.extend(cert_lines)
     else:
-        lines.append("\uc778\uc99d\uc11c \uc8fc\uc758: \uc5c6\uc74c")
+        lines.append("TLS certificate: no warnings")
 
-    return "\n".join(lines).strip()
+    return lines
 
 
-def build_recovery_summary_text(results: List[EndpointResult]) -> str:
-    pairs = group_endpoint_results(results)
-    n_checks = len(results)
-    n_sites = len(pairs)
-    lines = [
-        "*\uc694\uc57d (\ubcf5\uad6c)*",
-        "",
-        f"\uc2e4\ud328\ud55c \uc810\uac80: \uc5c6\uc74c (`{n_checks}`\uac74 / `{n_sites}`\uac1c \uc0ac\uc774\ud2b8).",
+def build_run_meta_lines(run_id: str, host: str) -> List[str]:
+    return [
+        f"run `{run_id}` \u00b7 host `{host}` \u00b7 `{now_local_str()}`",
+        (
+            f"timeout `{HC_TIMEOUT_SEC}s` \u00b7 slow\u2265`{HC_SLOW_MS}ms` "
+            f"\u00b7 mode `{REPORT_MODE}`"
+        ),
     ]
-    cert_any = any(result_has_cert_warning(r) for r in results)
-    if cert_any:
-        lines.append(
-            "\uc778\uc99d\uc11c\ub294 \uc544\ub798 \ubcf8\ubb38\uc758 SSL \ud56d\ubaa9\uc5d0\uc11c "
-            "\uc784\ubc15\xb7\uc8fc\uc758 \uc5ec\ubd80\ub97c \ud655\uc778\ud558\uc138\uc694."
-        )
-    else:
-        lines.append("\uc778\uc99d\uc11c \uc8fc\uc758: \uc5c6\uc74c.")
-    return "\n".join(lines).strip()
+
+
+def build_site_details_lines(
+    results: List[EndpointResult],
+) -> Tuple[List[str], bool]:
+    lines: List[str] = []
+    cert_warn_hit = False
+    for site_label, items in group_endpoint_results(results):
+        site_ok = all(x.ok for x in items)
+        tag = "OK" if site_ok else "FAIL"
+        lines.append(f"*{site_label}* [{tag}]  {site_composite_headline(items)}")
+        lines.append("")
+        for role_label, r in _site_check_pairs(items):
+            sub = "OK" if r.ok else "FAIL"
+            lines.append(
+                f"  {role_label} [{sub}]  `{r.name}` \u00b7 `{r.display_name}`"
+            )
+            detail_lines, cw = render_subcheck_detail_lines(r)
+            cert_warn_hit = cert_warn_hit or cw
+            for dl in detail_lines:
+                lines.append(f"    {dl}")
+            lines.append("")
+        lines.append("")
+    return lines, cert_warn_hit
+
+
+def build_slack_report(
+    results: List[EndpointResult],
+    run_id: str,
+    host: str,
+    *,
+    title: str,
+    subtitle: str = "",
+    summary_kind: str,
+) -> Tuple[str, bool]:
+    """Uniform Slack body: header → details → summary (summary always last)."""
+    header: List[str] = [f"*{title}*"]
+    if subtitle:
+        header.append(subtitle)
+    header.extend(build_run_meta_lines(run_id, host))
+
+    detail_lines, cert_warn_hit = build_site_details_lines(results)
+    summary_lines = build_footer_summary_lines(results, kind=summary_kind)
+
+    sections = [
+        "\n".join(header).strip(),
+        "*Details*\n\n" + "\n".join(detail_lines).strip(),
+        "*Summary*\n\n" + "\n".join(summary_lines).strip(),
+    ]
+    return "\n\n".join(sections), cert_warn_hit
 
 
 def render_subcheck_detail_lines(r: EndpointResult) -> Tuple[List[str], bool]:
@@ -1555,16 +1569,18 @@ def maybe_run_ok_heartbeat_slack(
 def build_ok_heartbeat_text(
     results: List[EndpointResult], run_id: str, host: str
 ) -> str:
-    lines = [
-        "*\ubaa8\ub2c8\ud130\ub9c1 \uc815\uc0c1*",
-        f"\uc8fc\uae30\uc801 \ud5ec\uc2a4\uccb4\ud06c\uac00 \uc9c0\uc18d \uc2e4\ud589 \uc911\uc774\uba70, \ubaa8\ub4e0 \uc5d4\ub4dc\ud3ec\uc778\ud2b8 \uac80\uc0ac \uc774\uc0c1 \uc5c6\uc74c.",
-        f"run `{run_id}` \u00b7 host `{host}` \u00b7 `{now_local_str()}`",
-        f"\uc5d4\ub4dc\ud3ec\uc778\ud2b8 `{len(results)}`\uac1c \u00b7 \uc815\uc0c1 \uc54c\ub9bc \uac04\uaca9 \uc57d `{OK_HEARTBEAT_INTERVAL_SEC // 60}`\ubd84",
-        "",
-    ]
-    for site_label, items in group_endpoint_results(results):
-        lines.append(f"*{site_label}*  {site_composite_headline(items)}")
-    return "\n".join(lines).strip()
+    text, _ = build_slack_report(
+        results,
+        run_id,
+        host,
+        title="Monitoring OK",
+        subtitle=(
+            f"Periodic heartbeat; all `{len(results)}` endpoint checks passed. "
+            f"Next heartbeat about every `{OK_HEARTBEAT_INTERVAL_SEC // 60}` minutes."
+        ),
+        summary_kind="heartbeat",
+    )
+    return text
 
 
 # =========================================================
@@ -1607,40 +1623,76 @@ def slack_post(payload_obj: Dict[str, Any]) -> None:
         _ = resp.read()
 
 
-def _chunk_text_for_slack(s: str, first_limit: int, rest_limit: int) -> List[str]:
+def _chunk_text_for_slack(s: str, limit: int) -> List[str]:
     if not s:
         return []
     parts: List[str] = []
     i = 0
     n = len(s)
     while i < n:
-        lim = first_limit if not parts else rest_limit
         remain = n - i
-        if remain <= lim:
+        if remain <= limit:
             parts.append(s[i:])
             break
-        end = i + lim
+        end = i + limit
         window = s[i:end]
         nl = window.rfind("\n")
-        if nl > lim // 4:
+        if nl > limit // 4:
             end = i + nl + 1
         parts.append(s[i:end])
         i = end
     return parts
 
 
+def _slack_chunk_limit() -> int:
+    # Slack webhooks ~4000 chars; keep margin for part headers (never truncate content).
+    return max(500, SLACK_MAX_CHARS - 250)
+
+
 def _split_slack_messages(full_text: str) -> List[str]:
-    max_len = max(500, SLACK_MAX_CHARS)
-    if len(full_text) <= max_len:
+    limit = _slack_chunk_limit()
+    if len(full_text) <= limit:
         return [full_text]
-    return _chunk_text_for_slack(full_text, max_len, max_len)
+
+    raw_sections = [s.strip() for s in full_text.split("\n\n") if s.strip()]
+    packed: List[str] = []
+    current: List[str] = []
+    current_len = 0
+
+    for sec in raw_sections:
+        sep = "\n\n" if current else ""
+        add_len = len(sep) + len(sec)
+        if current and current_len + add_len > limit:
+            packed.append("\n\n".join(current))
+            current = []
+            current_len = 0
+        if len(sec) > limit:
+            if current:
+                packed.append("\n\n".join(current))
+                current = []
+                current_len = 0
+            packed.extend(_chunk_text_for_slack(sec, limit))
+            continue
+        current.append(sec)
+        current_len += (len(sep) + len(sec)) if current_len else len(sec)
+
+    if current:
+        packed.append("\n\n".join(current))
+
+    if not packed:
+        return _chunk_text_for_slack(full_text, limit)
+    return packed
 
 
 def slack_post_text_batched(full_text: str, *, attach_image: bool = False) -> None:
     chunks = _split_slack_messages(full_text)
+    total = len(chunks)
     for idx, ch in enumerate(chunks):
+        body = ch
+        if total > 1:
+            body = f"_(part {idx + 1}/{total})_\n\n{ch}"
         payload: Dict[str, Any] = {
-            "text": ch,
+            "text": body,
             "username": SLACK_USERNAME,
             "icon_emoji": get_rotating_emoji(),
         }
@@ -1676,13 +1728,11 @@ def headers_pretty(h: Dict[str, str]) -> str:
 
 def build_slack_prefix(results: List[EndpointResult], cert_warn_hit: bool) -> str:
     lines = ["*YK Watchdog*"]
-    """  """
     mention_tokens: List[str] = list(ALWAYS_MENTION) if ENABLE_MENTIONS else []
     if FORCED_USER_MENTION not in mention_tokens:
         mention_tokens.append(FORCED_USER_MENTION)
     if mention_tokens:
         lines.append(f"mentions: {' '.join(mention_tokens)}")
-    """  """
 
     if ENABLE_MENTIONS and CHANNEL_MENTION_ON_FAIL:
         if any(not r.ok for r in results) or cert_warn_hit:
@@ -1692,50 +1742,29 @@ def build_slack_prefix(results: List[EndpointResult], cert_warn_hit: bool) -> st
 
 
 def build_resolved_text(results: List[EndpointResult], run_id: str, host: str) -> str:
-    lines = [
-        "*\uc804\uccb4 \ubcf5\uad6c\ub428*",
-        f"run `{run_id}` \u00b7 host `{host}` \u00b7 `{now_local_str()}`",
-        "",
-    ]
-    for site_label, items in group_endpoint_results(results):
-        lines.append(f"*{site_label}*  {site_composite_headline(items)}")
-        lines.append("")
-    lines.append(build_recovery_summary_text(results))
-    return "\n".join(lines).strip()
+    text, _ = build_slack_report(
+        results,
+        run_id,
+        host,
+        title="Recovered",
+        subtitle="All endpoints are healthy again.",
+        summary_kind="recovery",
+    )
+    return text
 
 
 def build_slack_text(
     results: List[EndpointResult], run_id: str, host: str
 ) -> Tuple[str, bool]:
-    lines = [
-        "*\ud5ec\uc2a4\uccb4\ud06c*",
-        f"run `{run_id}` \u00b7 host `{host}` \u00b7 `{now_local_str()}`",
-        f"timeout `{HC_TIMEOUT_SEC}s` \u00b7 slow>=`{HC_SLOW_MS}ms` \u00b7 mode `{REPORT_MODE}`",
-        "",
-    ]
-
-    cert_warn_hit = False
-
-    for site_label, items in group_endpoint_results(results):
-        site_ok = all(x.ok for x in items)
-        tag = "OK" if site_ok else "FAIL"
-        lines.append(f"*{site_label}* [{tag}]  {site_composite_headline(items)}")
-        lines.append("")
-        for role_label, r in _site_check_pairs(items):
-            sub = "OK" if r.ok else "FAIL"
-            lines.append(
-                f"  {role_label} [{sub}]  `{r.name}` \u00b7 `{r.display_name}`"
-            )
-            detail_lines, cw = render_subcheck_detail_lines(r)
-            cert_warn_hit = cert_warn_hit or cw
-            for dl in detail_lines:
-                lines.append(f"    {dl}")
-            lines.append("")
-        lines.append("")
-
-    lines.append(build_issue_summary_text(results))
-    text = "\n".join(lines).strip()
-    return text, cert_warn_hit
+    has_fail = any(not r.ok for r in results)
+    return build_slack_report(
+        results,
+        run_id,
+        host,
+        title="Healthcheck",
+        subtitle="Issue detected." if has_fail else "Status update.",
+        summary_kind="issue" if has_fail else "ok",
+    )
 
 
 # =========================================================
