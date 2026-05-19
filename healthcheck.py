@@ -1826,26 +1826,18 @@ def maybe_run_ok_heartbeat_slack(
 def build_ok_heartbeat_text(
     results: List[EndpointResult], run_id: str, host: str
 ) -> Tuple[str, bool]:
-    """Hourly all-OK message: short site lines only; TLS detail if ≤30d."""
+    """Hourly all-OK message: single-line completion summary."""
     cert_warn_hit = any(result_has_cert_warning(r) for r in results)
-    lines: List[str] = [
-        "*Monitoring OK*",
-        (
-            f"`{now_local_str()}` · host `{host}` · all `{len(results)}` checks passed "
-            f"· next ~`{OK_HEARTBEAT_INTERVAL_SEC // 60}` min"
-        ),
-        "",
-    ]
-    for site_label, items in group_endpoint_results(results):
-        lines.append(f"· *{site_label}* — {site_composite_headline(items)}")
-
-    cert_lines = cert_warning_lines(results)
-    if cert_lines:
-        lines.append("")
-        lines.append("*TLS (≤30d)*")
-        lines.extend(cert_lines)
-
-    return "\n".join(lines).strip(), cert_warn_hit
+    n_checks = len(results)
+    line = (
+        f"*Monitoring OK* · `{now_local_str()}` · host `{host}` · "
+        f"all `{n_checks}` checks passed"
+    )
+    cert_n = sum(1 for r in results if result_has_cert_warning(r))
+    if cert_n:
+        w = "warning" if cert_n == 1 else "warnings"
+        line += f" · TLS certificate: `{cert_n}` {w}"
+    return line, cert_warn_hit
 
 
 # =========================================================
@@ -2036,6 +2028,9 @@ def build_slack_text(
         detail_mode = "auto"
     else:
         detail_mode = "summary"
+
+    if not has_fail and detail_mode == "summary":
+        return build_ok_heartbeat_text(results, run_id, host)
 
     return build_slack_report(
         results,
