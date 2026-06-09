@@ -6,6 +6,23 @@ SERVICE_NAME="yk-web-watchdog"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}.timer"
 
+if [ ! -f "$BASE_DIR/.env" ]; then
+    echo "ERROR: $BASE_DIR/.env not found."
+    echo "Copy .env.example and set SLACK_WEBHOOK_URL (and paths) first:"
+    echo "  cp $BASE_DIR/.env.example $BASE_DIR/.env"
+    exit 1
+fi
+
+if [ ! -x "$BASE_DIR/run/run.sh" ]; then
+    echo "ERROR: $BASE_DIR/run/run.sh not found or not executable."
+    echo "  chmod +x $BASE_DIR/run/*.sh"
+    exit 1
+fi
+
+echo "Installing systemd units for:"
+echo "  BASE_DIR=$BASE_DIR"
+echo "  USER=$USER"
+
 # service
 sudo tee "$SERVICE_FILE" >/dev/null <<EOF
 [Unit]

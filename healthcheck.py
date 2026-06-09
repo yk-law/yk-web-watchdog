@@ -93,6 +93,7 @@ DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 
 # Notification policy (checks run every ~3 min via systemd; Slack is separate):
 # - All OK: heartbeat once per hour at the top of the hour (minute 0–2 window).
+# - Restart/resume after >5 min gap (or ./run/restart.sh): restart_detected alert.
 # - First failure: alert immediately (issue_detected).
 # - Still failing after ISSUE_REPEAT_MIN_FAILURES consecutive checks: alert again, then
 #   every ISSUE_REMINDER_INTERVAL_SEC until recovered (issue_persists).
@@ -747,6 +748,27 @@ def build_restart_report(
         f"\uc7ac\uae30\ub3d9 \uc2dc\uac01: `{current_time}`",
         f"\uae30\uac04 \ub0b4 \uac80\uc0ac: `{total}`\ud68c / \uc131\uacf5 `{success}` / \uc2e4\ud328 `{fails}`",
     ]
+    return "\n".join(lines)
+
+
+def build_restart_notice_text(
+    host: str,
+    last_check_time: str,
+    current_time: str,
+    results: List[EndpointResult],
+) -> str:
+    n = len(results)
+    fail_n = sum(1 for r in results if not r.ok)
+    lines = [
+        "*\uc7ac\uae30\ub3d9 \uac10\uc9c0 \u2014 \ubaa8\ub2c8\ud130\ub9c1 \uc7ac\uac1c*",
+        f"\ud638\uc2a4\ud2b8: `{host}`",
+        f"\uc774\uc804 \uc2e4\ud589: `{last_check_time}`",
+        f"\ud604\uc7ac \uc2e4\ud589: `{current_time}`",
+    ]
+    if fail_n:
+        lines.append(f"\ud604\uc7ac \uc0c1\ud0dc: *\uc774\uc0c1* \u2014 `{fail_n}`/`{n}` \uc2e4\ud328")
+    else:
+        lines.append(f"\ud604\uc7ac \uc0c1\ud0dc: *\uc815\uc0c1* \u2014 `{n}`\uac1c \uccb4\ud06c \ubaa8\ub450 \ud1b5\uacfc")
     return "\n".join(lines)
 
 
@@ -2089,7 +2111,7 @@ def main() -> None:
     # g["has_issue"] before this call, prev_has_issue always equals has_issue_now and
     # issue_detected / issue_resolved never fire correctly.
     notify, reason = should_notify(results, state, current_time)
-    if is_restart and has_issue_now:
+    if is_restart and last_check_time:
         notify = True
         reason = "restart_detected"
 
@@ -2141,29 +2163,20 @@ def main() -> None:
     if reason == "issue_resolved":
         text = build_resolved_text(results, run_id, host)
         cert_warn_hit = any(result_has_cert_warning(r) for r in results)
+    elif reason == "restart_detected" and last_check_time:
+        text = build_restart_notice_text(host, last_check_time, current_time, results)
+        gap_report = build_restart_report(state, last_check_time, current_time)
+        if gap_report:
+            text = gap_report + "\n\n" + text
+        if has_issue_now:
+            detail, cert_warn_hit = build_slack_text(
+                results, run_id, host, reason=reason
+            )
+            text = text + "\n\n" + detail
+        else:
+            cert_warn_hit = any(result_has_cert_warning(r) for r in results)
     else:
         text, cert_warn_hit = build_slack_text(results, run_id, host, reason=reason)
-
-    if is_restart and last_check_time:
-        restart_report = build_restart_report(state, last_check_time, current_time)
-        if restart_report:
-            try:
-                slack_post_text_batched(
-                    build_slack_prefix([], False) + restart_report,
-                    attach_image=False,
-                )
-                append_log(f"[{now_local_str()}] run_id={run_id} restart_report=sent")
-            except Exception as exc:
-                append_log(
-                    f"[{now_local_str()}] run_id={run_id} restart_report=failed err={repr(exc)}"
-                )
-
-        restart_header = (
-            "*\uc7ac\uae30\ub3d9 \ud6c4 \ud604\uc7ac \uc0c1\ud0dc*\n"
-            f"\uc774\uc804 \uc2e4\ud589: `{last_check_time}`\n"
-            f"\uc774\ubc88 \uc2e4\ud589: `{current_time}`\n\n"
-        )
-        text = restart_header + text
 
     try:
         slack_post_text_batched(
