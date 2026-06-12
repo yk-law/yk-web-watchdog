@@ -54,6 +54,10 @@ def env_csv(key: str, default: str = "") -> List[str]:
 SLACK_WEBHOOK_URL = env_str("SLACK_WEBHOOK_URL")
 if not SLACK_WEBHOOK_URL:
     raise RuntimeError("SLACK_WEBHOOK_URL is required")
+# Hourly all-OK heartbeat (script alive); defaults to SLACK_WEBHOOK_URL if unset.
+SLACK_HEARTBEAT_WEBHOOK_URL = (
+    env_str("SLACK_HEARTBEAT_WEBHOOK_URL", "") or SLACK_WEBHOOK_URL
+)
 # Incoming webhooks cannot reply in threads (no thread_ts). Use summary messages instead.
 # Threading would require SLACK_BOT_TOKEN + chat.postMessage (not implemented).
 
@@ -1834,6 +1838,7 @@ def maybe_run_ok_heartbeat_slack(
         slack_post_text_batched(
             build_slack_prefix(results, cert_warn_hit) + text,
             attach_image=False,
+            webhook_url=SLACK_HEARTBEAT_WEBHOOK_URL,
         )
         g["last_ok_heartbeat_hour"] = ok_heartbeat_hour_key()
         g["last_ok_heartbeat_sent_at"] = current_time
@@ -1882,7 +1887,9 @@ def get_rotating_emoji() -> str:
     return emojis[now_local().minute % len(emojis)]
 
 
-def slack_post(payload_obj: Dict[str, Any]) -> None:
+def slack_post(
+    payload_obj: Dict[str, Any], *, webhook_url: str = SLACK_WEBHOOK_URL
+) -> None:
     if SLACK_POST_MODE == "payload":
         body = urllib.parse.urlencode(
             {"payload": json.dumps(payload_obj, ensure_ascii=False)}
@@ -1893,7 +1900,7 @@ def slack_post(payload_obj: Dict[str, Any]) -> None:
         headers = {"Content-Type": "application/json; charset=utf-8"}
 
     req = urllib.request.Request(
-        SLACK_WEBHOOK_URL,
+        webhook_url,
         data=body,
         headers=headers,
         method="POST",
@@ -1963,7 +1970,12 @@ def _split_slack_messages(full_text: str) -> List[str]:
     return packed
 
 
-def slack_post_text_batched(full_text: str, *, attach_image: bool = False) -> None:
+def slack_post_text_batched(
+    full_text: str,
+    *,
+    attach_image: bool = False,
+    webhook_url: str = SLACK_WEBHOOK_URL,
+) -> None:
     chunks = _split_slack_messages(full_text)
     total = len(chunks)
     for idx, ch in enumerate(chunks):
@@ -1982,7 +1994,7 @@ def slack_post_text_batched(full_text: str, *, attach_image: bool = False) -> No
                     "fallback": "YK Watchdog Status Check",
                 }
             ]
-        slack_post(payload)
+        slack_post(payload, webhook_url=webhook_url)
 
 
 def headers_pretty(h: Dict[str, str]) -> str:
