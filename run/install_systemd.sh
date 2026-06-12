@@ -13,8 +13,8 @@ if [ ! -f "$BASE_DIR/.env" ]; then
     exit 1
 fi
 
-if [ ! -x "$BASE_DIR/run/run.sh" ]; then
-    echo "ERROR: $BASE_DIR/run/run.sh not found or not executable."
+if [ ! -x "$BASE_DIR/run/run.sh" ] || [ ! -x "$BASE_DIR/run/pre_start.sh" ]; then
+    echo "ERROR: $BASE_DIR/run/run.sh or run/pre_start.sh missing or not executable."
     echo "  chmod +x $BASE_DIR/run/*.sh"
     exit 1
 fi
@@ -35,6 +35,7 @@ Type=oneshot
 User=$USER
 WorkingDirectory=$BASE_DIR
 EnvironmentFile=$BASE_DIR/.env
+ExecStartPre=$BASE_DIR/run/pre_start.sh
 ExecStart=$BASE_DIR/run/run.sh
 
 NoNewPrivileges=true

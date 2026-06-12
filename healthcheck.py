@@ -88,6 +88,10 @@ if REPORT_MODE not in {"always", "on_change", "on_error"}:
     raise RuntimeError("REPORT_MODE must be always/on_change/on_error")
 
 STATE_FILE = env_str("STATE_FILE", "./state.json")
+RESTART_FLAG_FILE = env_str(
+    "RESTART_FLAG_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(STATE_FILE)), ".restart_requested"),
+)
 LOG_DIR = env_str("LOG_DIR", "./logs")
 MAX_HISTORY = env_int("MAX_HISTORY", 480)
 CLEANUP_DAYS = env_int("CLEANUP_DAYS", 7)
@@ -680,6 +684,17 @@ def build_daily_report(state: Dict[str, Any]) -> str:
     return "\n\n".join(sections)
 
 
+def consume_restart_flag() -> bool:
+    """Set by ./run/restart.sh or manual systemctl start (via run/pre_start.sh)."""
+    if not os.path.isfile(RESTART_FLAG_FILE):
+        return False
+    try:
+        os.remove(RESTART_FLAG_FILE)
+    except OSError:
+        pass
+    return True
+
+
 def detect_restart(
     state: Dict[str, Any], run_id: str, current_time: str
 ) -> Tuple[bool, Optional[str]]:
@@ -687,6 +702,9 @@ def detect_restart(
     last_check_time = g.get("last_check")
     last_run_id = g.get("last_run_id")
     force_restart = bool(g.get("force_restart_report", False))
+
+    if consume_restart_flag():
+        return True, last_check_time
 
     if force_restart:
         g["force_restart_report"] = False
@@ -1839,34 +1857,68 @@ def build_restart_heartbeat_text(
     return line, cert_warn_hit
 
 
-def maybe_run_restart_heartbeat_slack(
+def send_restart_slack_alerts(
     state: Dict[str, Any],
     results: List[EndpointResult],
     *,
     run_id: str,
     host: str,
     current_time: str,
+    last_check_time: Optional[str],
     has_issue_now: bool,
 ) -> None:
+    """On restart, always notify both main and heartbeat Slack channels."""
     g = get_global_state(state)
-    try:
-        text, cert_warn_hit = build_restart_heartbeat_text(
-            results, host, has_issue_now=has_issue_now
+    prev_check = last_check_time or "(\uc774\uc804 \uae30\ub85d \uc5c6\uc74c)"
+
+    main_text = build_restart_notice_text(host, prev_check, current_time, results)
+    if last_check_time:
+        gap_report = build_restart_report(state, last_check_time, current_time)
+        if gap_report:
+            main_text = gap_report + "\n\n" + main_text
+
+    cert_warn_hit = any(result_has_cert_warning(r) for r in results)
+    if has_issue_now:
+        detail, cert_warn_hit = build_slack_text(
+            results, run_id, host, reason="restart_detected"
         )
+        main_text = main_text + "\n\n" + detail
+
+    heartbeat_text, hb_cert_warn = build_restart_heartbeat_text(
+        results, host, has_issue_now=has_issue_now
+    )
+    prefix = build_slack_prefix(results, cert_warn_hit or hb_cert_warn)
+
+    try:
         slack_post_text_batched(
-            build_slack_prefix(results, cert_warn_hit) + text,
+            prefix + main_text,
+            attach_image=bool(SLACK_IMAGE_URL and SLACK_POST_MODE == "json"),
+            webhook_url=SLACK_WEBHOOK_URL,
+        )
+        append_log(f"[{now_local_str()}] run_id={run_id} restart_main=sent")
+    except Exception as exc:
+        append_log(
+            f"[{now_local_str()}] run_id={run_id} restart_main=failed err={repr(exc)}"
+        )
+
+    try:
+        slack_post_text_batched(
+            prefix + heartbeat_text,
             attach_image=False,
             webhook_url=SLACK_HEARTBEAT_WEBHOOK_URL,
         )
-        g["last_ok_heartbeat_sent_at"] = current_time
-        if not has_issue_now:
-            g["last_ok_heartbeat_hour"] = ok_heartbeat_hour_key()
-        save_state(state)
         append_log(f"[{now_local_str()}] run_id={run_id} restart_heartbeat=sent")
     except Exception as exc:
         append_log(
             f"[{now_local_str()}] run_id={run_id} restart_heartbeat=failed err={repr(exc)}"
         )
+
+    if has_issue_now:
+        mark_issue_alert_sent(g, current_time)
+    else:
+        g["last_ok_heartbeat_hour"] = ok_heartbeat_hour_key()
+    g["last_ok_heartbeat_sent_at"] = current_time
+    save_state(state)
 
 
 def maybe_run_ok_heartbeat_slack(
@@ -1878,9 +1930,8 @@ def maybe_run_ok_heartbeat_slack(
     current_time: str,
     notify: bool,
     has_issue_now: bool,
-    is_restart: bool,
 ) -> None:
-    if is_restart or has_issue_now or notify or REPORT_MODE == "always":
+    if has_issue_now or notify or REPORT_MODE == "always":
         return
 
     if not should_send_ok_heartbeat(state):
@@ -2177,9 +2228,6 @@ def main() -> None:
     # g["has_issue"] before this call, prev_has_issue always equals has_issue_now and
     # issue_detected / issue_resolved never fire correctly.
     notify, reason = should_notify(results, state, current_time)
-    if is_restart:
-        notify = True
-        reason = "restart_detected"
 
     g = get_global_state(state)
     g["has_issue"] = has_issue_now
@@ -2209,18 +2257,25 @@ def main() -> None:
         )
     )
 
-    append_log(f"[{now_local_str()}] run_id={run_id} notify={notify} reason={reason}")
+    restart_reason = "restart_detected" if is_restart else reason
+    append_log(
+        f"[{now_local_str()}] run_id={run_id} notify={notify or is_restart} "
+        f"reason={restart_reason}"
+    )
     save_state(state)
 
     if is_restart:
-        maybe_run_restart_heartbeat_slack(
+        send_restart_slack_alerts(
             state,
             results,
             run_id=run_id,
             host=host,
             current_time=current_time,
+            last_check_time=last_check_time,
             has_issue_now=has_issue_now,
         )
+        append_log(f"[{now_local_str()}] run_id={run_id} end (restart)")
+        return
 
     maybe_run_ok_heartbeat_slack(
         state,
@@ -2230,7 +2285,6 @@ def main() -> None:
         current_time=current_time,
         notify=notify,
         has_issue_now=has_issue_now,
-        is_restart=is_restart,
     )
 
     if not notify:
@@ -2240,20 +2294,6 @@ def main() -> None:
     if reason == "issue_resolved":
         text = build_resolved_text(results, run_id, host)
         cert_warn_hit = any(result_has_cert_warning(r) for r in results)
-    elif reason == "restart_detected":
-        prev_check = last_check_time or "(이전 기록 없음)"
-        text = build_restart_notice_text(host, prev_check, current_time, results)
-        if last_check_time:
-            gap_report = build_restart_report(state, last_check_time, current_time)
-            if gap_report:
-                text = gap_report + "\n\n" + text
-        if has_issue_now:
-            detail, cert_warn_hit = build_slack_text(
-                results, run_id, host, reason=reason
-            )
-            text = text + "\n\n" + detail
-        else:
-            cert_warn_hit = any(result_has_cert_warning(r) for r in results)
     else:
         text, cert_warn_hit = build_slack_text(results, run_id, host, reason=reason)
 

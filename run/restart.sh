@@ -11,7 +11,10 @@ set +a
 
 # Must match healthcheck.py STATE_FILE (from .env)
 STATE_FILE="${STATE_FILE:-$BASE_DIR/state.json}"
+FLAG_FILE="${RESTART_FLAG_FILE:-$BASE_DIR/.restart_requested}"
 echo "Setting force_restart_report in: $STATE_FILE"
+
+touch "$FLAG_FILE"
 
 if [ -f "$STATE_FILE" ]; then
     # Use python to safely update JSON
@@ -51,6 +54,6 @@ LOGFILE="${LOG_DIR}/${TODAY}.log"
 if [ -f "$LOGFILE" ]; then
     echo ""
     echo "=== Last log lines ($LOGFILE) ==="
-    grep -E 'notify=|restart|slack=|force_restart' "$LOGFILE" | tail -5 || true
+    grep -E 'notify=|restart_|slack=|force_restart' "$LOGFILE" | tail -8 || true
 fi
 
