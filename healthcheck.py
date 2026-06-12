@@ -74,10 +74,12 @@ SLACK_MAX_CHARS = env_int("SLACK_MAX_CHARS", 4000)
 SLACK_EMOJI_ROTATION = env_bool("SLACK_EMOJI_ROTATION", True)
 
 ENABLE_MENTIONS = env_bool("ENABLE_MENTIONS", True)
-ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "@\ubc15\ud3c9\uc6b0")
+ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "")
 CHANNEL_MENTION_ON_FAIL = env_bool("CHANNEL_MENTION_ON_FAIL", True)
 # Always mention this user in every Slack alert, regardless of mention options.
 FORCED_USER_MENTION = "<@U0A2YSXBXLG>"
+# CC on homepage issue alerts only (not hourly heartbeat). Slack user ID format.
+ISSUE_CC_MENTION = env_str("ISSUE_CC_MENTION", "<@U0AMKCT217S>")
 
 HC_TIMEOUT_SEC = env_float("HC_TIMEOUT_SEC", 10.0)
 HC_CONNECT_TIMEOUT_SEC = env_float("HC_CONNECT_TIMEOUT_SEC", HC_TIMEOUT_SEC)
@@ -704,7 +706,15 @@ def detect_restart(
     force_restart = bool(g.get("force_restart_report", False))
 
     if consume_restart_flag():
-        return True, last_check_time
+        # Ignore spurious flags on normal ~3 min timer cadence (pre_start mis-detection).
+        elapsed = seconds_since_timestamp(current_time, last_check_time)
+        if elapsed is not None and elapsed <= 300:
+            append_log(
+                f"[{current_time}] run_id={run_id} restart_flag=ignored "
+                f"elapsed_sec={elapsed:.0f}"
+            )
+        else:
+            return True, last_check_time
 
     if force_restart:
         g["force_restart_report"] = False
@@ -713,12 +723,8 @@ def detect_restart(
     if not last_check_time:
         return True, None
 
-    try:
-        last_dt = datetime.strptime(last_check_time, "%Y-%m-%d %H:%M:%S")
-        current_dt = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
-        if (current_dt - last_dt).total_seconds() > 300:
-            return True, last_check_time
-    except Exception:
+    elapsed = seconds_since_timestamp(current_time, last_check_time)
+    if elapsed is None or elapsed > 300:
         return True, last_check_time
 
     if last_run_id:
@@ -1887,11 +1893,14 @@ def send_restart_slack_alerts(
     heartbeat_text, hb_cert_warn = build_restart_heartbeat_text(
         results, host, has_issue_now=has_issue_now
     )
-    prefix = build_slack_prefix(results, cert_warn_hit or hb_cert_warn)
+    main_prefix = build_slack_prefix(
+        results, cert_warn_hit, include_issue_cc=has_issue_now
+    )
+    heartbeat_prefix = build_slack_prefix(results, hb_cert_warn, include_issue_cc=False)
 
     try:
         slack_post_text_batched(
-            prefix + main_text,
+            main_prefix + main_text,
             attach_image=bool(SLACK_IMAGE_URL and SLACK_POST_MODE == "json"),
             webhook_url=SLACK_WEBHOOK_URL,
         )
@@ -1903,7 +1912,7 @@ def send_restart_slack_alerts(
 
     try:
         slack_post_text_batched(
-            prefix + heartbeat_text,
+            heartbeat_prefix + heartbeat_text,
             attach_image=False,
             webhook_url=SLACK_HEARTBEAT_WEBHOOK_URL,
         )
@@ -2122,13 +2131,22 @@ def headers_pretty(h: Dict[str, str]) -> str:
     return " | ".join(parts)
 
 
-def build_slack_prefix(results: List[EndpointResult], cert_warn_hit: bool) -> str:
+def build_slack_prefix(
+    results: List[EndpointResult],
+    cert_warn_hit: bool,
+    *,
+    include_issue_cc: bool = False,
+) -> str:
     lines = ["*YK Watchdog*"]
     mention_tokens: List[str] = list(ALWAYS_MENTION) if ENABLE_MENTIONS else []
     if FORCED_USER_MENTION not in mention_tokens:
         mention_tokens.append(FORCED_USER_MENTION)
     if mention_tokens:
-        lines.append(f"mentions: {' '.join(mention_tokens)}")
+        mention_line = " ".join(mention_tokens)
+        has_fail = any(not r.ok for r in results) or cert_warn_hit
+        if include_issue_cc and ISSUE_CC_MENTION and has_fail:
+            mention_line += f" (cc. {ISSUE_CC_MENTION})"
+        lines.append(f"mentions: {mention_line}")
 
     if ENABLE_MENTIONS and CHANNEL_MENTION_ON_FAIL:
         if any(not r.ok for r in results) or cert_warn_hit:
@@ -2299,7 +2317,7 @@ def main() -> None:
 
     try:
         slack_post_text_batched(
-            build_slack_prefix(results, cert_warn_hit) + text,
+            build_slack_prefix(results, cert_warn_hit, include_issue_cc=True) + text,
             attach_image=bool(SLACK_IMAGE_URL and SLACK_POST_MODE == "json"),
         )
         append_log(f"[{now_local_str()}] run_id={run_id} slack=sent")
