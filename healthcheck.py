@@ -103,8 +103,8 @@ DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 
 # Notification policy (checks run every ~3 min via systemd; Slack is separate):
 # - All OK: heartbeat once per hour at the top of the hour (minute 0–2 window).
-# - Restart/resume after >5 min gap (or ./run/restart.sh): full restart alert to both
-#   SLACK_WEBHOOK_URL and SLACK_HEARTBEAT_WEBHOOK_URL (deduped if URLs match).
+# - Restart/resume after gap > RESTART_GAP_SEC (default 300; or ./run/restart.sh): full
+#   restart alert to both SLACK_WEBHOOK_URL and SLACK_HEARTBEAT_WEBHOOK_URL (deduped if URLs match).
 # - First failure: alert immediately (issue_detected).
 # - Still failing after ISSUE_REPEAT_MIN_FAILURES consecutive checks: alert again, then
 #   every ISSUE_REMINDER_INTERVAL_SEC until recovered (issue_persists).
@@ -112,6 +112,8 @@ DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 # REPORT_MODE=always sends on every check (not recommended).
 ISSUE_REPEAT_MIN_FAILURES = env_int("ISSUE_REPEAT_MIN_FAILURES", 2)
 ISSUE_REMINDER_INTERVAL_SEC = env_int("ISSUE_REMINDER_INTERVAL_SEC", 180)
+# Gap since last check before treating as restart (timer is ~3 min; 600 tolerates ~2 missed runs under load).
+RESTART_GAP_SEC = env_int("RESTART_GAP_SEC", 300)
 
 CERT_WARN_DAYS = env_int("CERT_WARN_DAYS", 30)
 CERT_ALERT_DAYS = env_int("CERT_ALERT_DAYS", 7)
@@ -738,7 +740,7 @@ def detect_restart(
     if consume_restart_flag():
         # Ignore spurious flags on normal ~3 min timer cadence (pre_start mis-detection).
         elapsed = seconds_since_timestamp(current_time, last_check_time)
-        if elapsed is not None and elapsed <= 300:
+        if elapsed is not None and elapsed <= RESTART_GAP_SEC:
             append_log(
                 f"[{current_time}] run_id={run_id} restart_flag=ignored "
                 f"elapsed_sec={elapsed:.0f}"
@@ -754,7 +756,7 @@ def detect_restart(
         return True, None
 
     elapsed = seconds_since_timestamp(current_time, last_check_time)
-    if elapsed is None or elapsed > 300:
+    if elapsed is None or elapsed > RESTART_GAP_SEC:
         return True, last_check_time
 
     if last_run_id:
@@ -763,7 +765,7 @@ def detect_restart(
                 last_run_id[:8] + last_run_id[9:], "%Y%m%d%H%M%S"
             )
             cur_dt = datetime.strptime(run_id[:8] + run_id[9:], "%Y%m%d%H%M%S")
-            if (cur_dt - prev_dt).total_seconds() > 300:
+            if (cur_dt - prev_dt).total_seconds() > RESTART_GAP_SEC:
                 return True, last_check_time
         except Exception:
             pass
