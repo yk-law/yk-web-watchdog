@@ -1,4 +1,5 @@
 state.json
+.env*
 .restart_requested
 logs/
 __pycache__/
