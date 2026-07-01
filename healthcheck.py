@@ -77,7 +77,7 @@ ENABLE_MENTIONS = env_bool("ENABLE_MENTIONS", True)
 ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "")
 CHANNEL_MENTION_ON_FAIL = env_bool("CHANNEL_MENTION_ON_FAIL", True)
 # Always mention this user in every Slack alert, regardless of mention options.
-FORCED_USER_MENTION = "<@U0A2YSXBXLG>"
+FORCED_USER_MENTION = "<@U0AMKCT217S>"
 # CC on homepage issue alerts only (not hourly heartbeat). Slack user ID format.
 ISSUE_CC_MENTION = env_str("ISSUE_CC_MENTION", "<@U0AMKCT217S>")
 
@@ -155,8 +155,12 @@ SITE_HOSTS: List[Tuple[str, str, str]] = [
     ("traffic", "yklawfirm-traffic.co.kr", "www.yklawfirm-traffic.co.kr"),
     ("school", "yklawfirm-school.co.kr", "www.yklawfirm-school.co.kr"),
     ("estate", "yklawfirm-estate.co.kr", "www.yklawfirm-estate.co.kr"),
-    ("military", "yklawfirm-military.co.kr", "www.yklawfirm-military.co.kr"),    
-    ("regeneration", "yklawfirm-regeneration.co.kr", "www.yklawfirm-regeneration.co.kr"),    
+    ("military", "yklawfirm-military.co.kr", "www.yklawfirm-military.co.kr"),
+    (
+        "regeneration",
+        "yklawfirm-regeneration.co.kr",
+        "www.yklawfirm-regeneration.co.kr",
+    ),
     ("medical", "yklawfirm-medical.co.kr", "www.yklawfirm-medical.co.kr"),
 ]
 
@@ -173,7 +177,9 @@ CLONE_SITES: List[Tuple[str, str, str]] = [
 ]
 
 
-def _endpoint_pair(site_key: str, bare_host: str, www_host: str) -> List[Dict[str, Any]]:
+def _endpoint_pair(
+    site_key: str, bare_host: str, www_host: str
+) -> List[Dict[str, Any]]:
     return [
         {
             "name": f"{site_key}{ENDPOINT_SUFFIX_BARE}",
@@ -197,7 +203,9 @@ def _endpoint_pair(site_key: str, bare_host: str, www_host: str) -> List[Dict[st
     ]
 
 
-def _clone_endpoint(site_key: str, punycode_host: str, display_label: str) -> Dict[str, Any]:
+def _clone_endpoint(
+    site_key: str, punycode_host: str, display_label: str
+) -> Dict[str, Any]:
     return {
         "name": site_key,
         "display_name": display_label,
@@ -639,7 +647,9 @@ def build_daily_report(state: Dict[str, Any]) -> str:
             "The watchdog may have been offline or state was reset."
         )
     elif not issue_runs and not endpoint_failures:
-        detail_lines.append(f"No incidents on `{report_date}`. All checks were healthy.")
+        detail_lines.append(
+            f"No incidents on `{report_date}`. All checks were healthy."
+        )
     else:
         detail_lines.append(
             f"Issue rate: `{issue_runs}/{total}` runs ({uptime_pct:.1f}% clean)."
@@ -700,9 +710,7 @@ def build_daily_report(state: Dict[str, Any]) -> str:
             f"`{len(endpoint_failures)}` endpoint(s) affected."
         )
         if top:
-            summary_lines.append(
-                f"Most affected: {top[2]} (`{top[1]}` failed checks)."
-            )
+            summary_lines.append(f"Most affected: {top[2]} (`{top[1]}` failed checks).")
         if failing_now:
             summary_lines.append(
                 f"Still failing now: `{len(failing_now)}` endpoint(s) — see Details."
@@ -827,9 +835,13 @@ def build_restart_notice_text(
         f"\ud604\uc7ac \uc2e4\ud589: `{current_time}`",
     ]
     if fail_n:
-        lines.append(f"\ud604\uc7ac \uc0c1\ud0dc: *\uc774\uc0c1* \u2014 `{fail_n}`/`{n}` \uc2e4\ud328")
+        lines.append(
+            f"\ud604\uc7ac \uc0c1\ud0dc: *\uc774\uc0c1* \u2014 `{fail_n}`/`{n}` \uc2e4\ud328"
+        )
     else:
-        lines.append(f"\ud604\uc7ac \uc0c1\ud0dc: *\uc815\uc0c1* \u2014 `{n}`\uac1c \uccb4\ud06c \ubaa8\ub450 \ud1b5\uacfc")
+        lines.append(
+            f"\ud604\uc7ac \uc0c1\ud0dc: *\uc815\uc0c1* \u2014 `{n}`\uac1c \uccb4\ud06c \ubaa8\ub450 \ud1b5\uacfc"
+        )
     return "\n".join(lines)
 
 
@@ -1485,9 +1497,7 @@ def build_footer_summary_lines(
         d = r.ssl.expires_in_days if r.ssl else None
         who = r.display_name or r.name
         if d is not None and d < 0:
-            cert_lines.append(
-                f"- *{r.site_label}* / `{who}`: expired ({abs(d)}d ago)"
-            )
+            cert_lines.append(f"- *{r.site_label}* / `{who}`: expired ({abs(d)}d ago)")
         elif d is not None:
             lvl = "critical" if d <= CERT_ALERT_DAYS else "warning"
             cert_lines.append(f"- *{r.site_label}* / `{who}`: {lvl}, {d}d left")
@@ -1798,7 +1808,9 @@ def max_consecutive_failures(results: List[EndpointResult]) -> int:
     return max(r.consecutive_failures for r in failing)
 
 
-def seconds_since_timestamp(current_time_str: str, last_time_str: Any) -> Optional[float]:
+def seconds_since_timestamp(
+    current_time_str: str, last_time_str: Any
+) -> Optional[float]:
     if not last_time_str:
         return None
     try:
