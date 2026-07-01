@@ -76,8 +76,6 @@ SLACK_EMOJI_ROTATION = env_bool("SLACK_EMOJI_ROTATION", True)
 ENABLE_MENTIONS = env_bool("ENABLE_MENTIONS", True)
 ALWAYS_MENTION = env_csv("ALWAYS_MENTION", "")
 CHANNEL_MENTION_ON_FAIL = env_bool("CHANNEL_MENTION_ON_FAIL", True)
-# Always mention this user in every Slack alert, regardless of mention options.
-FORCED_USER_MENTION = "<@U0AMKCT217S>"
 # CC on homepage issue alerts only (not hourly heartbeat). Slack user ID format.
 ISSUE_CC_MENTION = env_str("ISSUE_CC_MENTION", "<@U0AMKCT217S>")
 
@@ -2167,8 +2165,6 @@ def build_slack_prefix(
 ) -> str:
     lines = ["*YK Watchdog*"]
     mention_tokens: List[str] = list(ALWAYS_MENTION) if ENABLE_MENTIONS else []
-    if FORCED_USER_MENTION not in mention_tokens:
-        mention_tokens.append(FORCED_USER_MENTION)
     if mention_tokens:
         mention_line = " ".join(mention_tokens)
         has_fail = any(not r.ok for r in results) or cert_warn_hit
