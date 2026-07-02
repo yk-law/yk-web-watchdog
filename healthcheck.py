@@ -103,12 +103,13 @@ DAILY_REPORT_TIME = env_str("DAILY_REPORT_TIME", "09:00")
 # - All OK: heartbeat once per hour at the top of the hour (minute 0–2 window).
 # - Restart/resume after gap > RESTART_GAP_SEC (default 300; or ./run/restart.sh): full
 #   restart alert to both SLACK_WEBHOOK_URL and SLACK_HEARTBEAT_WEBHOOK_URL (deduped if URLs match).
-# - First failure: alert immediately (issue_detected).
-# - Still failing after ISSUE_REPEAT_MIN_FAILURES consecutive checks: alert again, then
-#   every ISSUE_REMINDER_INTERVAL_SEC until recovered (issue_persists).
+# - Confirmed failure (FAILURE_CONFIRM_MIN consecutive probe misses): issue_detected.
+# - Still failing: issue_persists every ISSUE_REMINDER_INTERVAL_SEC until recovered.
 # - Recovery: one alert (issue_resolved).
+# - Single probe miss is logged (probe_ok=false) but ok stays true until confirmed.
 # REPORT_MODE=always sends on every check (not recommended).
 ISSUE_REPEAT_MIN_FAILURES = env_int("ISSUE_REPEAT_MIN_FAILURES", 2)
+FAILURE_CONFIRM_MIN = env_int("FAILURE_CONFIRM_MIN", 2)
 ISSUE_REMINDER_INTERVAL_SEC = env_int("ISSUE_REMINDER_INTERVAL_SEC", 180)
 # Gap since last check before treating as restart (timer is ~3 min; 600 tolerates ~2 missed runs under load).
 RESTART_GAP_SEC = env_int("RESTART_GAP_SEC", 300)
@@ -122,7 +123,6 @@ HEADER_KEYS = [
         "strict-transport-security,cache-control,etag,last-modified,server,content-type,date,x-cache-status,via",
     )
 ]
-
 
 # =========================================================
 # Endpoint config (external VM: bare domain redirect + www host service)
@@ -293,6 +293,7 @@ class EndpointResult:
     type: str
     url: str
     ok: bool
+    probe_ok: bool
     status_class: str
     summary: str
     expected: str
@@ -304,6 +305,7 @@ class EndpointResult:
     final_probe: Optional[FinalProbe]
     ssl: Optional[SslInfo]
     consecutive_failures: int
+    consecutive_probe_failures: int
     first_failed_at: Optional[str]
     last_ok_at: Optional[str]
     checked_at: str
@@ -406,10 +408,35 @@ def get_global_state(state: Dict[str, Any]) -> Dict[str, Any]:
     return state["_global"]
 
 
+def apply_failure_confirm_policy(
+    result: EndpointResult, prev: Dict[str, Any]
+) -> None:
+    """Defer all probe failures until FAILURE_CONFIRM_MIN consecutive hits."""
+    if result.probe_ok:
+        result.consecutive_probe_failures = 0
+        result.ok = True
+        return
+
+    prev_probe_ok = prev.get("probe_ok")
+    prev_cf = int(
+        prev.get("consecutive_probe_failures")
+        or prev.get("consecutive_connection_failures", 0)
+        or 0
+    )
+    if prev_probe_ok is False:
+        probe_cf = prev_cf + 1
+    else:
+        probe_cf = 1
+    result.consecutive_probe_failures = probe_cf
+    result.ok = probe_cf < FAILURE_CONFIRM_MIN
+
+
 def update_endpoint_state(state: Dict[str, Any], result: EndpointResult) -> None:
     prev = state.get(result.name, {})
     if not isinstance(prev, dict):
         prev = {}
+
+    apply_failure_confirm_policy(result, prev)
 
     prev_ok = prev.get("ok")
     prev_first_failed_at = prev.get("first_failed_at")
@@ -433,6 +460,7 @@ def update_endpoint_state(state: Dict[str, Any], result: EndpointResult) -> None
         "name": result.name,
         "display_name": result.display_name,
         "ok": result.ok,
+        "probe_ok": result.probe_ok,
         "type": result.type,
         "status_class": result.status_class,
         "summary": result.summary,
@@ -440,6 +468,7 @@ def update_endpoint_state(state: Dict[str, Any], result: EndpointResult) -> None
         "first_failed_at": first_failed_at,
         "last_ok_at": last_ok_at,
         "consecutive_failures": consecutive_failures,
+        "consecutive_probe_failures": result.consecutive_probe_failures,
         "actual": result.actual,
         "expected": result.expected,
     }
@@ -869,7 +898,7 @@ def classify_error(
     txt = (err or "").lower()
     if "resolving timed out" in txt or "could not resolve host" in txt:
         return "DNS"
-    if "connection refused" in txt:
+    if "connection refused" in txt or "failed to connect" in txt:
         return "TCP"
     if "ssl" in txt or "tls" in txt or "certificate" in txt:
         return "TLS"
@@ -1601,6 +1630,16 @@ def render_subcheck_detail_lines(r: EndpointResult) -> Tuple[List[str], bool]:
 
     if r.consecutive_failures:
         lines.append(f"\uc5f0\uc18d \uc2e4\ud328: `{r.consecutive_failures}`\ud68c")
+    if r.consecutive_probe_failures:
+        lines.append(
+            f"\uc5f0\uc18d \ud504\ub85c\ube0c \uc2e4\ud328: `{r.consecutive_probe_failures}`\ud68c "
+            f"(\uc7a5\uc560 \ud310\uc815 \uae30\uc900 `{FAILURE_CONFIRM_MIN}`\ud68c)"
+        )
+    if r.probe_ok is False and r.ok:
+        lines.append(
+            f"1\ud68c \uc2e4\ud328 \uac10\uc9c0 \u2014 \uc7a5\uc560 \ud310\uc815 \uc804 "
+            f"(`{r.consecutive_probe_failures}`/`{FAILURE_CONFIRM_MIN}`)"
+        )
     if r.first_failed_at:
         lines.append(f"\ucd5c\ucd08 \uc2e4\ud328 \uc2dc\uac01: `{r.first_failed_at}`")
     if r.last_ok_at:
@@ -1715,7 +1754,6 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
     expected = endpoint_expected_text(endpoint)
     redirect_probe = None
     final_probe = None
-    ok = False
     status_class = "HTTP"
     summary = ""
     actual = ""
@@ -1740,7 +1778,7 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
             and (final_probe.err is None)
         )
 
-        ok = first_ok and final_ok
+        probe_ok = first_ok and final_ok
         actual = (
             f"{redirect_probe.status_code or 'NO_STATUS'} -> {redirect_probe.location or '-'}"
             f" | final={final_probe.status_code or 'NO_STATUS'}"
@@ -1750,17 +1788,19 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
             redirect_probe.status_code or final_probe.status_code,
             endpoint_type,
         )
-        summary = "redirect_ok" if ok else "redirect_mismatch"
+        summary = "redirect_ok" if probe_ok else "redirect_mismatch"
 
     else:
         final_probe = probe_single(url, follow_redirects=True)
         expected_status = set(int(x) for x in endpoint.get("expect_status", [200]))
-        ok = final_probe.status_code in expected_status and final_probe.err is None
+        probe_ok = (
+            final_probe.status_code in expected_status and final_probe.err is None
+        )
         actual = str(final_probe.status_code or "NO_STATUS")
         status_class = classify_error(
             final_probe.err, final_probe.status_code, endpoint_type
         )
-        summary = "service_ok" if ok else "service_down"
+        summary = "service_ok" if probe_ok else "service_down"
 
     prev = (
         state.get(endpoint["name"], {})
@@ -1778,7 +1818,8 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
         display_name=display_name,
         type=endpoint_type,
         url=url,
-        ok=ok,
+        ok=probe_ok,
+        probe_ok=probe_ok,
         status_class=status_class,
         summary=summary,
         expected=expected,
@@ -1790,6 +1831,7 @@ def check_endpoint(endpoint: Dict[str, Any], state: Dict[str, Any]) -> EndpointR
         final_probe=final_probe,
         ssl=ssl_obj,
         consecutive_failures=consecutive_failures,
+        consecutive_probe_failures=0,
         first_failed_at=first_failed_at,
         last_ok_at=last_ok_at,
         checked_at=checked_at,
@@ -1847,7 +1889,6 @@ def should_notify(
         if not has_issue_now and prev_has_issue:
             return True, "issue_resolved"
         if has_issue_now and not prev_has_issue:
-            # First failed check while previously healthy — alert immediately.
             return True, "issue_detected"
         if has_issue_now and prev_has_issue:
             if max_cf < ISSUE_REPEAT_MIN_FAILURES:
