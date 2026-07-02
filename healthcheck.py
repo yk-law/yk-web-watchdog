@@ -770,7 +770,15 @@ def detect_restart(
     g = get_global_state(state)
     last_check_time = g.get("last_check")
     last_run_id = g.get("last_run_id")
-    force_restart = bool(g.get("force_restart_report", False))
+
+    # ./run/restart.sh sets this explicitly — always notify, even within RESTART_GAP_SEC.
+    if bool(g.get("force_restart_report", False)):
+        g["force_restart_report"] = False
+        consume_restart_flag()
+        append_log(
+            f"[{current_time}] run_id={run_id} restart=force_restart_report"
+        )
+        return True, last_check_time
 
     if consume_restart_flag():
         # Ignore spurious flags on normal ~3 min timer cadence (pre_start mis-detection).
@@ -782,10 +790,6 @@ def detect_restart(
             )
         else:
             return True, last_check_time
-
-    if force_restart:
-        g["force_restart_report"] = False
-        return True, last_check_time
 
     if not last_check_time:
         return True, None
